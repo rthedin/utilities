@@ -1,21 +1,26 @@
 #!/bin/bash
 
-# --------------------
+# ------------------------------------------------------------- #
 # estimateCells.sh
 # 
-# Read domain limits and cell size from `setUp` file and give a estimate
-# of number of cells for processor splitting
+# Read domain limits and cell size from `setUp` file and give
+# a estimate of number of cells for processor splitting
 #
 # Regis Thedin
+# regis.thedin@nrel.gov
 # May 19, 2020
-# -------------------------
-
+# ------------------------------------------------------------- #
 
 estimateCells(){
 
     RED='\033[0;31m'
     GREEN='\033[0;32m'
     NC='\033[0m' # No Color
+
+    if [ $# -eq 0 ]; then
+        echo "ERROR: No setup file given."
+        return
+    fi
 
     setup=$1
 
@@ -84,7 +89,7 @@ estimateCells(){
         echo "Grid resolution on block 4:" $(echo $x / $nx4 |bc)
     fi
 
-    cellblock1=$(echo $nx1*$ny2*$nz1 |bc)
+    cellblock1=$(echo $nx1*$ny1*$nz1 |bc)
     cellblock2=$(echo $nx2*$ny2*$nz2 | bc)
     cellblock3=$(echo $nx3*$ny3*$nz3 | bc)
     cellblock4=$(echo $nx4*$ny4*$nz4 | bc)
