@@ -29,8 +29,8 @@ set tabstop=4
 set smartindent
 
 " undo dir
-set undodir=~/.vim/undodir
-set undofile
+" set undodir=~/.vim/undodir
+" set undofile
 
 " incremental search 
 set incsearch
@@ -44,6 +44,7 @@ Plug 'preservim/nerdtree'
 Plug 'morhetz/gruvbox'
 Plug 'vim-airline/vim-airline'
 Plug 'ctrlpvim/ctrlp.vim'
+" Plug 'roman/golden-ratio'
 
 call plug#end()
 
@@ -51,6 +52,10 @@ let g:gruvbox_invert_selection='0'
 colorscheme gruvbox 
 set background=dark
 
+" considerably larger unfolded vimdiff
+if &diff
+    set diffopt=filler,context:300
+endif
 
 " ----- REMAPS ------
 " --- Remaps - insert non-recursive map
@@ -59,8 +64,6 @@ inoremap jj <Esc>
 " --- Remaps - normal non-recursive map
 " Allow backspace to delete chars in normal mode
 nnoremap <BS> X
-" from normal mode, insert single charactor
-nnoremap <C-i> i <Esc>r
 " insert new lines without leaving normal mode
 nnoremap <Leader>o o<Esc>
 nnoremap <Leader>O O<Esc>
@@ -76,8 +79,16 @@ nnoremap <leader>h :wincmd h<CR>
 nnoremap <leader>j :wincmd j<CR>
 nnoremap <leader>k :wincmd k<CR>
 nnoremap <leader>l :wincmd l<CR>
-nnoremap <leader>+ <C-w>3+<CR>
-nnoremap <leader>- <C-w>3-<CR>
-nnoremap <leader>> <C-w>3><CR>
-nnoremap <leader>< <C-w>3<<CR>
+nnoremap <leader>+ <C-w>5+<CR>
+nnoremap <leader>- <C-w>5-<CR>
+nnoremap <leader>> <C-w>5><CR>
+nnoremap <leader>< <C-w>5<<CR>
 nnoremap <leader>= <C-w>=<CR>
+
+" substitute
+nnoremap <leader>s :.,$s/\<<C-r><C-w>\>//gc<Left><Left><Left>
+
+" other useful remaps
+xnoremap <leader>d "_d
+nnoremap <leader>d "_d
+nnoremap <leader>i i_<Esc>r
