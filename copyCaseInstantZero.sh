@@ -35,6 +35,6 @@ copyCaseInstantZero(){
         cp -r $1/processor$c/0        processor$c/
     done
 
-    echo -e "${GREEN} Done.            ${NC}"    
+    echo -e "${GREEN} Done.               ${NC}"    
 }
 
