@@ -10,7 +10,7 @@ from paraview.simple import *
 paraview.simple._DisableFirstRenderCameraReset()
 
 # ------------------------------------------------------------------------------
-# ----------------------------- PARSING INPUTS ---------------------------
+# -------------------------------- PARSING INPUTS ------------------------------
 # ------------------------------------------------------------------------------
 
 parser = argparse.ArgumentParser()
@@ -32,7 +32,7 @@ args = parser.parse_args()
 case = args.case
 var = args.var
 comp = args.comp.upper()
-normal = args.normal
+normal = int(args.normal)
 anim_fstart = args.firstFrame
 anim_fend = args.lastFrame
 slicetype = args.sType
@@ -42,6 +42,7 @@ scaleupperbound = args.scaleU
 
 if not os.path.exists(case):
 	parser.error("Path does not exist")
+
 
 # ------------------------------------------------------------------------------
 # ----------------------------- ANIMATION PARAMETERS ---------------------------
@@ -55,13 +56,26 @@ if not os.path.exists(case):
 #								-ff 32 
 #								-lf 40
 
+# View parameters
+renderViewSize = [900, 700]
+
+# Output images parameters 
+ratio = 1100/600. # 1100 x 600px is a good ratio for streamwise slices or non-square-ish domain
+ratio = 800/600. # 800 x 600px is a good ratio
+horiz_resolution = 1100
+output_resolution = [horiz_resolution, int(horiz_resolution/ratio)]
+
+
+# ------------------------------------------------------------------------------
+# --------------------- END OF USER-MODIFIABLE PARAMETERS ----------------------
+# ------------------------------------------------------------------------------
+
 
 # Some simple changes for robustness
 if var == 'u' or var=='vel':
     var='U'
 if comp == 'MAG':
     comp='Magnitude'
-
 
 # Scale for colobar appropriately if no values were given
 if scalelowerbound==-99 or scaleupperbound==99:
@@ -79,21 +93,6 @@ if scalelowerbound==-99 or scaleupperbound==99:
         scaleleg = 'T (K)'
     else:
         print('\n\nWARNING: Specity lower and upper limits of the scale.\n\n')
-
-
-# View parameters
-renderViewSize = [900, 700]
-
-# Output images parameters 
-ratio = 1100/600. # 1100 x 600px is a good ratio for streamwise slices or non-square-ish domain
-ratio = 800/600. # 800 x 600px is a good ratio
-horiz_resolution = 1100
-output_resolution = [horiz_resolution, int(horiz_resolution/ratio)]
-
-
-# ------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------
-# END OF USER-MODIFIABLE PARAMETERS
 
 # Get list of VTKs
 files1 = glob.glob('{case}/sequencedVTK/{var}_{stype}.{h}.*'.format(case=case, var=var, stype=slicetype, h=normal));
@@ -123,8 +122,6 @@ print 'Reading {var}_{stype}.{normal}.[{i}..{f}].vtk'.format(var=var, stype=slic
 print 'Number of available VTKs:', len(files1)
 print 'Animation will be saved as', anim_outpath
 print ' '
-
-
 
 
 # ------------------------------------------------------------------------------
@@ -272,6 +269,19 @@ renderView1.Shadows = 0
 renderView1.CameraParallelProjection = 1
 renderView1.ProgressivePasses = 2  # needs --enable-streaming-options
 
+renderView1.CameraFocalPoint = [0, 0, 0]
+if slicetype[0] == 'x' or slicetype[0:3]=='ter':
+    renderView1.CameraPosition = [-1, 0, 0]
+    renderView1.CameraViewUp = [0, 0, 1]
+elif slicetype[0] == 'y':
+    renderView1.CameraPosition = [0, -1, 0]
+    renderView1.CameraViewUp = [0, 0, 1]
+elif slicetype[0] == 'z':
+    renderView1.CameraPosition = [0, 0, 1]
+    renderView1.CameraViewUp = [0, 1, 0]
+else:
+    print('This slice may require a custom camera view. Edit the script.')
+
 # View parameters
 renderView1.InteractionMode = '2D'
 renderView1.ResetCamera()
@@ -281,7 +291,7 @@ renderView1.ResetCamera()
 ##########################################################################
 ############################## SAVE ANIMATION ############################
 ##########################################################################
-print('Saving animation')
+print('Saving animation...')
 
 # save animation
 SaveAnimation(anim_outpath,
@@ -294,4 +304,5 @@ SaveAnimation(anim_outpath,
     #TransparentBackground=1,
     FrameWindow=[anim_fstart, anim_fend])
 
+print('Done.')
 
