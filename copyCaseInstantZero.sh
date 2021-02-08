@@ -20,11 +20,11 @@ copyCaseInstantZero(){
     echo  "Copying" $1 "into the current dir,"
     echo  "including processor*/0 and log files."
     
-    cp -r $1/{1_*,2_*,3_*,4_*,setUp.*} . 2>/dev/null || :
+    cp -r $1/{1_*,2_*,3_*,4_*,setUp*} . 2>/dev/null || :
     cp    $1/log.1.* .
     cp    $1/foam1* .
     cp -r $1/constant .
-    cp -r $1/{system,0.original} .
+    cp -r $1/{system,0.original,0} .
     
     nCores=$(find $1 -maxdepth 1 -type d -name 'processor*' | wc -l)
     

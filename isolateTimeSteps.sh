@@ -45,7 +45,7 @@ isolateTimeSteps(){
 
     echo "Copying 0, system, constant..."
     mkdir constant
-    cp -r $orig/{0.ori*,system} .
+    cp -rf $orig/{0.ori*,system} .
     cp -rf $orig/constant/{ABLPr*,cellD*,dynam*,g,polyMesh,transp*,turbu*} constant/
 
     # Check for non-valid times
@@ -62,7 +62,7 @@ isolateTimeSteps(){
         cp -r $orig/processor$c/constant processor$c/
         for arg; do
             if [ -d $orig/processor0/$arg ]; then
-                echo -ne "Copying processor$c/$argo      \r"
+                echo -ne "Copying processor$c/$arg        \r"
                 cp -r $orig/processor$c/$arg/ processor$c
             fi
         done
