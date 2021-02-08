@@ -23,8 +23,8 @@ parser.add_argument("--firstFrame", "-ff", type=int, default=0,         help="fi
 parser.add_argument("--lastFrame", "-lf",  type=int, default=9999,      help="last frame to be saved (blank for all available)")
 parser.add_argument("--sType", "-slice",   type=str, default="zNormal", help="slice type (e.g. zNormal, yNormal, terrain)") 
 parser.add_argument("--t0", "-t0",         type=int, default=20100,     help="time shift for label")
-parser.add_argument("--scaleL", "-scalel", type=float, default=-99,     help="scale lower bound")
-parser.add_argument("--scaleU", "-scaleu", type=float, default=99,      help="scale upper bound")
+parser.add_argument("--scaleL", "-lb",     type=float, default=-99,     help="scale lower bound")
+parser.add_argument("--scaleU", "-ub",     type=float, default=99,      help="scale upper bound")
 
 args = parser.parse_args()
 
@@ -78,21 +78,24 @@ if comp == 'MAG':
     comp='Magnitude'
 
 # Scale for colobar appropriately if no values were given
-if scalelowerbound==-99 or scaleupperbound==99:
-    if var[0]=='U':
-        scaleleg = 'U {comp} (m/s)'.format(comp=comp)
+if var[0]=='U':
+    scaleleg = 'U {comp} (m/s)'.format(comp=comp)
+    if scalelowerbound==-99 or scaleupperbound==99:
         if comp=='Magnitude' or comp=='X':
             scalelowerbound = 2
             scaleupperbound = 12
         elif comp=='Y' or comp=='Z':
             scalelowerbound = -3.0
             scaleupperbound = 3.0
-    elif var[0]=='T':
+elif var[0]=='T':
+    scaleleg = 'T (K)'
+    if scalelowerbound==-99 or scaleupperbound==99:
         scalelowerbound = 300
         scaleupperbound = 320
-        scaleleg = 'T (K)'
-    else:
-        print('\n\nWARNING: Specity lower and upper limits of the scale.\n\n')
+else:
+    scaleleg=var
+    if scalelowerbound==-99 or scaleupperbound==99:
+        print('\n\nWARNING: Specify lower and upper limits of the scale.\n\n')
 
 # Get list of VTKs
 files1 = glob.glob('{case}/sequencedVTK/{var}_{stype}.{h}.*'.format(case=case, var=var, stype=slicetype, h=normal));
@@ -114,11 +117,13 @@ print '- variable:', var
 print '- component:', comp
 print '- slice type:',slicetype
 print '- normal:', normal
+print '- scale upper bound:', scaleupperbound
+print '- scale lower bound:', scalelowerbound
 print '- first frame:', anim_fstart
 print '- last frame:', anim_fend
 print ' '
 
-print 'Reading {var}_{stype}.{normal}.[{i}..{f}].vtk'.format(var=var, stype=slicetype, normal=normal, i=anim_fstart, f=anim_fend)
+print 'Reading {var}_{stype}.{normal}.{{{i}..{f}}}.vtk'.format(var=var, stype=slicetype, normal=normal, i=anim_fstart, f=anim_fend)
 print 'Number of available VTKs:', len(files1)
 print 'Animation will be saved as', anim_outpath
 print ' '
