@@ -22,7 +22,7 @@ parser.add_argument("--normal", "-normal", type=float,default=80,       help="po
 parser.add_argument("--firstFrame", "-ff", type=int, default=0,         help="first frame to be saved")
 parser.add_argument("--lastFrame", "-lf",  type=int, default=9999,      help="last frame to be saved (blank for all available)")
 parser.add_argument("--sType", "-slice",   type=str, default="zNormal", help="slice type (e.g. zNormal, yNormal, terrain)") 
-parser.add_argument("--t0", "-t0",         type=int, default=20100,     help="time shift for label")
+parser.add_argument("--t0", "-t0",         type=int, default=999  ,     help="time shift for label")
 parser.add_argument("--scaleL", "-lb",     type=float, default=-99,     help="scale lower bound")
 parser.add_argument("--scaleU", "-ub",     type=float, default=99,      help="scale upper bound")
 
@@ -70,11 +70,10 @@ output_resolution = [horiz_resolution, int(horiz_resolution/ratio)]
 # --------------------- END OF USER-MODIFIABLE PARAMETERS ----------------------
 # ------------------------------------------------------------------------------
 
-
 # Some simple changes for robustness
 if var == 'u' or var=='vel':
     var='U'
-if comp == 'MAG':
+if comp == 'MAG' or comp=='MAGNITUDE':
     comp='Magnitude'
 
 # Scale for colobar appropriately if no values were given
@@ -105,6 +104,11 @@ files1.sort();
 if anim_fend==0 or anim_fend>=9999:
 	anim_fend = len(files1)
 
+# identify first slice to set the appropriate time shift in label
+if t0 == 999:
+    fullpath = os.path.realpath(os.path.abspath(files1[0]))
+    t0 = int(os.path.basename(os.path.dirname(fullpath)))
+
 # set output path
 if not os.path.exists('{case}/animation'.format(case=case)):
     os.makedirs('{case}/animation'.format(case=case))
@@ -117,6 +121,7 @@ print '- variable:', var
 print '- component:', comp
 print '- slice type:',slicetype
 print '- normal:', normal
+print '- time shift:', t0
 print '- scale upper bound:', scaleupperbound
 print '- scale lower bound:', scalelowerbound
 print '- first frame:', anim_fstart
@@ -127,7 +132,6 @@ print 'Reading {var}_{stype}.{normal}.{{{i}..{f}}}.vtk'.format(var=var, stype=sl
 print 'Number of available VTKs:', len(files1)
 print 'Animation will be saved as', anim_outpath
 print ' '
-
 
 # ------------------------------------------------------------------------------
 # --------------------------------- FIRST PANEL --------------------------------
