@@ -23,6 +23,7 @@ parser.add_argument("--firstFrame", "-ff", type=int, default=0,         help="fi
 parser.add_argument("--lastFrame", "-lf",  type=int, default=9999,      help="last frame to be saved (blank for all available)")
 parser.add_argument("--sType", "-slice",   type=str, default="zNormal", help="slice type (e.g. zNormal, yNormal, terrain)") 
 parser.add_argument("--t0", "-t0",         type=int, default=999  ,     help="time shift for label")
+parser.add_argument("--timescale", "-tscale",type=int, default=999,     help="time scale for label")
 parser.add_argument("--scaleL", "-lb",     type=float, default=-99,     help="scale lower bound")
 parser.add_argument("--scaleU", "-ub",     type=float, default=99,      help="scale upper bound")
 
@@ -37,6 +38,7 @@ anim_fstart = args.firstFrame
 anim_fend = args.lastFrame
 slicetype = args.sType
 t0 = args.t0
+timescale = args.timescale
 scalelowerbound = args.scaleL
 scaleupperbound = args.scaleU
 
@@ -109,6 +111,14 @@ if t0 == 999:
     fullpath = os.path.realpath(os.path.abspath(files1[0]))
     t0 = int(os.path.basename(os.path.dirname(fullpath)))
 
+# set scale of the time label (one slice represents 100s, 500s, etc). Assumes uniform sampling
+if timescale == 999:
+    fullpath0 = os.path.realpath(os.path.abspath(files1[0]))
+    t0 = int(os.path.basename(os.path.dirname(fullpath0)))
+    fullpath1 = os.path.realpath(os.path.abspath(files1[1]))
+    t1 = int(os.path.basename(os.path.dirname(fullpath1)))
+    timescale = t1-t0
+
 # set output path
 if not os.path.exists('{case}/animation'.format(case=case)):
     os.makedirs('{case}/animation'.format(case=case))
@@ -122,6 +132,7 @@ print '- component:', comp
 print '- slice type:',slicetype
 print '- normal:', normal
 print '- time shift:', t0
+print '- time scale:', timescale
 print '- scale upper bound:', scaleupperbound
 print '- scale lower bound:', scalelowerbound
 print '- first frame:', anim_fstart
@@ -240,7 +251,7 @@ annotateTimeFilter1 = AnnotateTimeFilter(Input=slices)
 # Properties modified on annotateTimeFilter1
 annotateTimeFilter1.Format = 'Time: %.1f s'
 annotateTimeFilter1.Shift = t0
-annotateTimeFilter1.Scale = 100.0
+annotateTimeFilter1.Scale = timescale
 
 # show data in view
 annotateTimeFilter1Display = Show(annotateTimeFilter1, renderView1)
