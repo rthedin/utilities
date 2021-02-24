@@ -290,13 +290,13 @@ renderView1.CameraParallelProjection = 1
 renderView1.ProgressivePasses = 2  # needs --enable-streaming-options
 
 renderView1.CameraFocalPoint = [0, 0, 0]
-if slicetype[0] == 'x' or slicetype[0:3]=='ter':
+if slicetype[0] == 'x':
     renderView1.CameraPosition = [-1, 0, 0]
     renderView1.CameraViewUp = [0, 0, 1]
 elif slicetype[0] == 'y':
     renderView1.CameraPosition = [0, -1, 0]
     renderView1.CameraViewUp = [0, 0, 1]
-elif slicetype[0] == 'z':
+elif slicetype[0] == 'z' or slicetype[0:3]=='ter':
     renderView1.CameraPosition = [0, 0, 1]
     renderView1.CameraViewUp = [0, 1, 0]
 else:
