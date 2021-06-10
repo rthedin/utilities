@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ------------------------------------------------------------------- #
-# Scrip to generate a video using ffmpeg from a series of pngs.
+# Script to generate a video using ffmpeg from a series of pngs.
 # Framerate can be given as an optional argument; default=10fps.
 #
 # Example call:
