@@ -99,7 +99,7 @@ estimateCells(){
         echo "Grid resolution on block 3:" $(echo $x / $nx3 |bc) "(uniform)"
     fi
     if [ $(echo $x/$nx4|bc) -ne $(echo $y/$ny4|bc) ] || \
-        [ $(echo $z4/$nz4|bc) -ne $(echo $z4/$nz4|bc) ]; then
+        [ $(echo $x/$nx4|bc) -ne $(echo $z4/$nz4|bc) ]; then
         echo -e "${RED}WARNING: cells are not isotropic on block 4${NC}"
         echo "Grid resolution on block 4:" $(echo $x / $nx4 |bc) "by" $(echo $y/$ny4|bc) "by" $(echo $z4/$nz4|bc)
     else
