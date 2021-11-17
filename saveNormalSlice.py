@@ -55,6 +55,10 @@ if not os.path.exists(case):
 #                               -var U
 #                               -comp Z
 #                               -slice xNormal
+#                               -normal 80
+#                               -lb -1
+#                               -ub 1
+#                               -t0 20000
 #								-ff 32 
 #								-lf 40
 
@@ -99,7 +103,7 @@ else:
         print('\n\nWARNING: Specify lower and upper limits of the scale.\n\n')
 
 # Get list of VTKs
-files1 = glob.glob('{case}/sequencedVTK/{var}_{stype}.{h}.*'.format(case=case, var=var, stype=slicetype, h=normal));
+files1 = glob.glob('{case}/sequencedVTK/{var}_{stype}.{h}.*'.format(case=case, var=var, stype=slicetype, h=str(normal).replace('-','m') ));
 files1.sort();
 
 # set last frame of animation
@@ -122,7 +126,7 @@ if timescale == 999:
 # set output path
 if not os.path.exists('{case}/animation'.format(case=case)):
     os.makedirs('{case}/animation'.format(case=case))
-anim_outpath = '{case}/animation/{stype}_{h}m_{var}_{comp}.png'.format(case=case, stype=slicetype, h=normal, var=var, comp=comp)
+anim_outpath = '{case}/animation/{stype}_{h}m_{var}_{comp}.png'.format(case=case, stype=slicetype, h=str(normal).replace('-','m'), var=var, comp=comp)
 
 # Print information
 print '---------------- CASE PARAMETERS ----------------'
@@ -139,7 +143,7 @@ print '- first frame:', anim_fstart
 print '- last frame:', anim_fend
 print ' '
 
-print 'Reading {var}_{stype}.{normal}.{{{i}..{f}}}.vtk'.format(var=var, stype=slicetype, normal=normal, i=anim_fstart, f=anim_fend)
+print 'Reading {var}_{stype}.{normal}.{{{i}..{f}}}.vtk'.format(var=var, stype=slicetype, normal=str(normal).replace('-','m'), i=anim_fstart, f=anim_fend)
 print 'Number of available VTKs:', len(files1)
 print 'Animation will be saved as', anim_outpath
 print ' '
@@ -208,6 +212,10 @@ else:
 uLUT = GetColorTransferFunction(var)
 uLUT.RGBPoints = [6.088017156980581, 0.231373, 0.298039, 0.752941, 8.98210526138447, 0.865003, 0.865003, 0.865003, 11.876193365788358, 0.705882, 0.0156863, 0.14902]
 uLUT.ScalarRangeInitialized = 1.0
+
+# Apply a preset using its name. Note this may not work as expected when presets have duplicate names.
+if scalelowerbound+scaleupperbound != 0:
+    uLUT.ApplyPreset('Viridis (matplotlib)', True)
 
 # get opacity transfer function/opacity map for 'U'/'T'/'UMean'/...
 uPWF = GetOpacityTransferFunction(var)
@@ -305,8 +313,6 @@ else:
 # View parameters
 renderView1.InteractionMode = '2D'
 renderView1.ResetCamera()
-
-
 
 ##########################################################################
 ############################## SAVE ANIMATION ############################
