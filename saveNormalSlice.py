@@ -112,7 +112,10 @@ if anim_fend==0 or anim_fend>=9999:
 
 # identify first slice to set the appropriate time shift in label
 if t0 == 999:
-    fullpath = os.path.realpath(os.path.abspath(files1[0]))
+    try:
+        fullpath = os.path.realpath(os.path.abspath(files1[0]))
+    except IndexError:
+        print('Error: You might be requesting slices that are not available.\n\n')
     t0 = int(os.path.basename(os.path.dirname(fullpath)))
 
 # set scale of the time label (one slice represents 100s, 500s, etc). Assumes uniform sampling
