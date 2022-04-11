@@ -22,6 +22,9 @@ def interpolate_to_heights(df,heights):
     """
     from scipy.interpolate import interp1d
 
+    if isinstance(df, xr.Dataset):
+        return df.interp(height=heights)
+
     # If single height is asked
     if isinstance(heights, (float,int)):
         heights=[heights]
@@ -34,6 +37,23 @@ def interpolate_to_heights(df,heights):
         unstacked.loc[hgt] = f(hgt)
     # Restack and set index
     df_out = unstacked.loc[heights].stack().reset_index().set_index(['datetime','height']).sort_index()
+    return df_out
+
+
+
+# from https://stackoverflow.com/questions/48068938/set-new-index-for-pandas-dataframe-interpolating
+def interpDataframe(df, new_index):
+    """
+    Return a new DataFrame with all columns values interpolated
+    to the new_index values.
+    Example: interpDataframe(df, np.arange(0,10) )
+    """
+    df_out = pd.DataFrame(index=new_index)
+    df_out.index.name = df.index.name
+
+    for colname, col in df.iteritems():
+        df_out[colname] = np.interp(new_index, df.index, col)
+
     return df_out
 
 
@@ -80,7 +100,8 @@ def calc_stats(df,offset='10min'):
     stats['uv'] = covariance(unstacked['u'], unstacked['v'], offset, resample=True).stack()
     stats['vw'] = covariance(unstacked['v'], unstacked['w'], offset, resample=True).stack()
     stats['uw'] = covariance(unstacked['u'], unstacked['w'], offset, resample=True).stack()
-    stats['thetaw'] = covariance(unstacked['theta'], unstacked['w'], offset, resample=True).stack()
+    if 'theta' in unstacked.keys():
+        stats['thetaw'] = covariance(unstacked['theta'], unstacked['w'], offset, resample=True).stack()
     return stats
 
 
@@ -91,13 +112,13 @@ def calc_QOIs(df):
     Calculate derived quantities (IN PLACE)
     """
     from mmctools.helper_functions import covariance, calc_wind 
-    df['wspd'],df['wdir'] = calc_wind(df)
+    if 'wspd' not in df.keys() and 'wdir' not in df.keys():
+        df['wspd'],df['wdir'] = calc_wind(df)
     df['u*'] = (df['uw']**2 + df['vw']**2)**0.25
     df['TKE'] = 0.5*(df['uu'] + df['vv'] + df['ww'])
     ang = np.arctan2(df['v'],df['u'])
     df['TI'] = df['uu']*np.cos(ang)**2 + 2*df['uv']*np.sin(ang)*np.cos(ang) + df['vv']*np.sin(ang)**2
     df['TI'] = np.sqrt(df['TI']) / df['wspd']
-
 
 
 
@@ -287,6 +308,19 @@ def calc_coherence(s1,s2, interval='120min', window_length='10min', window='hamm
 
 
 
+
+def addScalebar(ax, size_in_m=5000, label='5 km', loc='lower left', color='black', fontsize=14, hideTicks=True):
+
+    from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+    import matplotlib.font_manager as fm 
+
+    ax.add_artist(AnchoredSizeBar(ax.transData, size=size_in_m, label=label, loc='lower left', 
+                  pad=0.3, color=color, frameon=False, size_vertical=2, fontproperties=fm.FontProperties(size=fontsize))
+                  )
+
+    if hideTicks:
+        ax.set_xticks([])
+        ax.set_yticks([])
 
 
 
