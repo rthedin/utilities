@@ -71,10 +71,11 @@ def performCorrelationSubDomain (ds, nSubDomainsX, nSubDomainsY, ti, tf, dateref
     return vsubdom
 
 
-
 def spatialCorrelation2D (ds, x0, y0, ti=None, tf=None, dateref=None):
     '''
     Perform spatial correlation on a 2D field, averaging in time
+
+    try/except cases to catch Will's data
     
     Parameters
     ==========
@@ -93,7 +94,13 @@ def spatialCorrelation2D (ds, x0, y0, ti=None, tf=None, dateref=None):
     if dateref != None:
         ti = pd.to_datetime(ti, unit='s', origin = dateref)
         tf = pd.to_datetime(tf, unit='s', origin = dateref)
-    ds = ds.sel(datetime=slice(ti,tf)).copy()
+    try:
+        ds = ds.sel(datetime=slice(ti,tf)).copy()
+    except KeyError:
+        index_ti = np.where(ds.datetime.values == ti )[0][0]
+        index_tf = np.where(ds.datetime.values == tf )[0][0]
+        ds = ds.isel(datetime=slice(index_ti,index_tf)).copy()
+
     times = ds.datetime.values
     
     # find position of (x0, y0)
@@ -103,10 +110,18 @@ def spatialCorrelation2D (ds, x0, y0, ti=None, tf=None, dateref=None):
     print(f'Performing spatial correlation wrt to point ({ds.isel(x=iNearest).x.values}, ' \
           f'{ds.isel(y=jNearest).y.values}), between {ti} and {tf}.', end='\r', flush=True)
     
-    mean = ds.sel(datetime=slice(ti,tf)).mean(dim='datetime')
+    try:
+        mean = ds.sel(datetime=slice(ti,tf)).mean(dim='datetime')
+    except KeyError:
+        mean = ds.isel(datetime=slice(index_ti,index_tf)).mean(dim='datetime')
+
     vlist=[]
     for i, t in enumerate(times):
-        primeField = ds.sel(datetime=t) - mean
+        try:
+            primeField = ds.sel(datetime=t) - mean
+        except KeyError:
+            primeField = ds.isel(datetime=i) - mean
+
         v = primeField*primeField.isel(x=iNearest, y=jNearest)
         vlist.append(v)
     
@@ -117,7 +132,7 @@ def spatialCorrelation2D (ds, x0, y0, ti=None, tf=None, dateref=None):
 
 
 
-def averageSubdomains(dsv, nSubDomainsX, nSubDomainsY, ds=None):
+def averageSubdomains_old(dsv, nSubDomainsX, nSubDomainsY, ds=None):
     '''
     Receives the output of `performCorrelationSubDomain` and average accross
     the different sub-domains
@@ -166,6 +181,58 @@ def averageSubdomains(dsv, nSubDomainsX, nSubDomainsY, ds=None):
     return avgv
 
 
+def averageSubdomains(dsv, nSubDomainsX, nSubDomainsY, ds=None,
+                      nSubDomainsSkipN = 0, nSubDomainsSkipS = 0, nSubDomainsSkipW = 0, nSubDomainsSkipE = 0):
+    '''
+    Receives the output of `performCorrelationSubDomain` and average accross
+    the different sub-domains
+    
+    Parameters
+    ==========
+    dsv: Dataset
+        Dataset containing the spatial correlation to be averaged
+    ds: Dataset (optional)
+        Original dataset used to compute spatial correlation. Needed for 
+        wind direction. Assumed `wdir` exists. If provided, wdir is part
+        of the output dataset.
+    nSubDomainsX, nSubDomainsY: int
+        Number of subdivisions of the subdomain
+        
+    '''
+    
+    # get window size for wdir averaging
+    window = dsv.datetime[1] - dsv.datetime[0]
+
+    # Get subdomain limits. These are _not_ the overall bounding box.
+    res = (dsv.x[1]-dsv.x[0]).values
+    xmin = dsv.x.min().values;  xmax = dsv.x.max().values+res
+    ymin = dsv.y.min().values;  ymax = dsv.y.max().values+res
+    xSubDom = np.linspace(xmin, xmax, nSubDomainsX+1);  xSubDom = xSubDom[nSubDomainsSkipW:len(xSubDom)-nSubDomainsSkipE]
+    ySubDom = np.linspace(ymin, ymax, nSubDomainsY+1);  ySubDom = ySubDom[nSubDomainsSkipS:len(ySubDom)-nSubDomainsSkipN]
+    x0SubDom = (xSubDom[1:] + xSubDom[:-1]) / 2
+    y0SubDom = (ySubDom[1:] + ySubDom[:-1]) / 2
+
+    # Get clipped-in-space wspd and wdir values based on subdomains considered (excludes skips)
+    Lsubdom = xSubDom[1]-xSubDom[0]
+    ds = ds.sel(x=slice(xmin+nSubDomainsSkipW*Lsubdom,xmax-nSubDomainsSkipE*Lsubdom), y=slice(ymin+nSubDomainsSkipS*Lsubdom,ymax-nSubDomainsSkipN*Lsubdom) )
+
+    avgv = []
+    for t, d in enumerate(dsv.datetime):
+        if isinstance(ds, xr.Dataset):  wdir = ds.sel(datetime=slice(d,d+window))['wdir'].mean().values
+        subsubvavg = []
+        subv = dsv.sel(datetime=d)
+        for i in range(len(x0SubDom)):
+            for j in range(len(y0SubDom)):
+                x0 = x0SubDom[i];  y0 = y0SubDom[j]
+                subsubv = subv.sel(x=slice(xSubDom[i],xSubDom[i+1]-1), y=slice(ySubDom[j],ySubDom[j+1]-1)) 
+                subsubvavg.append( subsubv.assign_coords({'x':subsubv.x-x0, 'y':subsubv.y-y0}).expand_dims('datetime') )
+        subsubvavg = xr.concat(subsubvavg, dim='datetime').mean(dim='datetime')
+        subsubvavg = subsubvavg.expand_dims('datetime').assign_coords({'datetime': [d.values]})
+        if isinstance(ds, xr.Dataset):  subsubvavg = subsubvavg.assign({'wdir': ('datetime', [wdir])})
+        avgv.append(subsubvavg)
+    avgv = xr.concat(avgv, dim='datetime')
+
+    return avgv
 
 def getSpaceCorrAlongWindDir (ds, dsv, nSubDomainsX, nSubDomainsY, var_oi='uu', wdirvar='wdir', \
                               nSubDomainsSkipN = 0, nSubDomainsSkipS = 0, nSubDomainsSkipW = 0, nSubDomainsSkipE = 0):
