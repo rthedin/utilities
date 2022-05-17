@@ -6,14 +6,32 @@
 import numpy as np
 import xarray as xr
 import pandas as pd
+import sys
+import warnings
 
-def performCorrelationSubDomain (ds, nSubDomainsX, nSubDomainsY, ti, tf, dateref=None, window=1200, inc=600):
+
+def performCorrelationSubDomain (ds, nSubDomainsX, nSubDomainsY, ti, tf, dateref=None, window=1200, inc=600, verbose=False):
     '''
     Perform spatial correlations on subdomains with respect to the central point of each subdomain.
     Additionally, performs the same procedure in windows, useful for changing conditions and/or smoother
     results. This is useful on a periodic-type case in order to get smoother curves (analogous to a
     windowing approach for PSDs)
 
+    This function takes an even number of grid points in each direction and returns one less. The xmax and 
+    ymax edges are not considered. That is because we clip the domain and get the central point in each
+    subdomain. The edges of the subdomains do not overlap.
+    
+    For example:
+    x and y go from 0 to 3000 in 10 m increments. That means there are 301 points in each direction. The
+    function takes the full dataset, issues a warning, and clips is to 300 points, going from 0 to 2990.
+    Considering 3 sub-domains are requested, they go from
+    x = 0    to 990  which means 100 points, with center at 500.  50 points to the left, 49 points to the right
+    x = 1000 to 1990 which means 100 points, with center at 1500. 50 points to the left, 49 points to the right
+    x = 2000 to 2990 which means 100 points, with center at 2500. 50 points to the left, 49 points to the right
+    By making sure there is a grid point in the center, we can guarantee a grid point with correlation 1.
+    The final dataset goes from 0 to 2990, contains 300 points and the correlation 1 are at x=y=500,1500,2500.
+    Points along x=y=3000 are discarded.
+    
     Parameters
     ==========
     ds: Dataset
@@ -30,28 +48,49 @@ def performCorrelationSubDomain (ds, nSubDomainsX, nSubDomainsY, ti, tf, dateref
         results are given for each window, in seconds. Default 20 min.
     inc: scalar
         Window marching increment (overlap), in seconds. Default 10 min.
-        
-        
+
+
     Example call:
     v2x2 = performCorrelationSubDomain(ds80m[['u','v']],
-                                       nSubDomainsX=2, 
+                                       nSubDomainsX=2,
                                        nSubDomainsY=2,
                                        ti=133200, tf=133200+4*3600,
                                        dateref=pd.to_datetime('2010-05-14 12:00:00'),
                                        window=1800, inc=600 )
+                                       
     '''
-    
     assert isinstance(nSubDomainsX, int), "Number of subdomains should be an integer"
     assert isinstance(nSubDomainsY, int), "Number of subdomains should be an integer"
     
+    # The domain should have an even number of grid points so that we can get the middle one to be centers of subdomains
+    if len(ds.x) % 2 :
+        warnings.warn(f'An even number of x coordinates is required. The dataset provided has {len(ds.x)} x coordinates. '\
+                      f'Removing the last one, x = {ds.x[-1].values}.')
+        ds = ds.isel(x=slice(None,-1))
+    if len(ds.y) % 2 :
+        warnings.warn(f'An even number of y coordinates is required. The dataset provided has {len(ds.y)} y coordinates. '\
+                      f'Removing the last one, y = {ds.y[-1].values}.')
+        ds = ds.isel(y=slice(None,-1))
+
     # Get subdomain limits
-    xmin = ds.x[0].values;  xmax = ds.x[-1].values
-    ymin = ds.y[0].values;  ymax = ds.y[-1].values
+    resx = (ds.x[1]-ds.x[0]).values;  resy = (ds.y[1]-ds.y[0]).values
+    xmin = ds.x[0].values;  xmax = ds.x[-1].values + resx
+    ymin = ds.y[0].values;  ymax = ds.y[-1].values + resy
     xSubDom = np.linspace(xmin, xmax, nSubDomainsX+1)
     ySubDom = np.linspace(ymin, ymax, nSubDomainsY+1)
     x0SubDom = (xSubDom[1:] + xSubDom[:-1]) / 2
     y0SubDom = (ySubDom[1:] + ySubDom[:-1]) / 2
+    
+    # All the subdomain-centers x0,y0 need to valid grid points
+    assert set(x0SubDom) <= set(ds.x.values), f"x coordinate span of {xmax-xmin} can't be properly split between requested {nSubDomainsX} subdomains in x."
+    assert set(y0SubDom) <= set(ds.y.values), f"y coordinate span of {ymax-ymin} can't be properly split between requested {nSubDomainsY} subdomains in y."
 
+    if verbose:
+        print(f'x subdomains: {xSubDom}')
+        print(f'y subdomains: {ySubDom}\n')
+        print(f'x centers: {x0SubDom}')
+        print(f'y centers: {y0SubDom}\n')
+    
     vlist = []
     while ti+window <= tf:
         ti_dt = pd.to_datetime(ti, unit='s', origin=dateref)
@@ -59,12 +98,61 @@ def performCorrelationSubDomain (ds, nSubDomainsX, nSubDomainsY, ti, tf, dateref
         for i, _ in enumerate(xSubDom[:-1]):
             for j, _ in enumerate(ySubDom[:-1]):
                 x0 = x0SubDom[i];  y0 = y0SubDom[j]
-                dssub = ds.sel(x=slice(xSubDom[i],xSubDom[i+1]-1), y=slice(ySubDom[j],ySubDom[j+1]-1)).copy()
-
+                dssub = ds.sel(x=slice(xSubDom[i],xSubDom[i+1]-resx), y=slice(ySubDom[j],ySubDom[j+1]-resy)).copy()
                 v_curr = spatialCorrelation2D(dssub, x0=x0, y0=y0, ti=ti, tf=ti+window, dateref=dateref)
                 v_curr = v_curr.expand_dims('datetime').assign_coords({'datetime': [ti_dt]})
                 vlist.append(v_curr)
         ti = ti + inc
+
+    # concatenate the resulting list
+    vsubdom = xr.combine_by_coords(vlist)
+    return vsubdom
+
+
+def performCorrelationSubDomainPar (fullPathToNc, nSubDomainsX, nSubDomainsY, ti, dateref, window, inc):
+    '''
+    Same as above, but for parallel computations.
+    '''
+    
+    assert isinstance(nSubDomainsX, int), "Number of subdomains should be an integer"
+    assert isinstance(nSubDomainsY, int), "Number of subdomains should be an integer"
+
+    VTKz = xr.open_dataset(fullPathToNc)
+    ds = VTKz[['u_','v_','w']].copy()
+
+    # The domain should have an even number of grid points so that we can get the middle one to be centers of subdomains
+    if len(ds.x) % 2 :
+        warnings.warn(f'An even number of x coordinates is required. The dataset provided has {len(ds.x)} x coordinates. '\
+                      f'Removing the last one, x = {ds.x[-1].values}.')
+        ds = ds.isel(x=slice(None,-1))
+    if len(ds.y) % 2 :
+        warnings.warn(f'An even number of y coordinates is required. The dataset provided has {len(ds.y)} y coordinates. '\
+                      f'Removing the last one, y = {ds.y[-1].values}.')
+        ds = ds.isel(y=slice(None,-1))
+        
+    # Get subdomain limits
+    resx = (ds.x[1]-ds.x[0]).values;  resy = (ds.y[1]-ds.y[0]).values
+    xmin = ds.x[0].values;  xmax = ds.x[-1].values + resx
+    ymin = ds.y[0].values;  ymax = ds.y[-1].values + resy
+    xSubDom = np.linspace(xmin, xmax, nSubDomainsX+1)
+    ySubDom = np.linspace(ymin, ymax, nSubDomainsY+1)
+    x0SubDom = (xSubDom[1:] + xSubDom[:-1]) / 2
+    y0SubDom = (ySubDom[1:] + ySubDom[:-1]) / 2
+
+    # All the subdomain-centers x0,y0 need to valid grid points
+    assert set(x0SubDom) <= set(ds.x.values), f"x coordinate span of {xmax-xmin} can't be properly split between requested {nSubDomainsX} subdomains in x."
+    assert set(y0SubDom) <= set(ds.y.values), f"y coordinate span of {ymax-ymin} can't be properly split between requested {nSubDomainsY} subdomains in y."
+
+    vlist = []
+    ti_dt = pd.to_datetime(ti, unit='s', origin=dateref)
+    tf_dt = pd.to_datetime(ti+window, unit='s', origin=dateref)
+    for i, _ in enumerate(xSubDom[:-1]):
+        for j, _ in enumerate(ySubDom[:-1]):
+            x0 = x0SubDom[i];  y0 = y0SubDom[j]
+            dssub = ds.sel(x=slice(xSubDom[i],xSubDom[i+1]-resx), y=slice(ySubDom[j],ySubDom[j+1]-resy)).copy()
+            v_curr = spatialCorrelation2D(dssub, x0=x0, y0=y0, ti=ti, tf=ti+window, dateref=dateref)
+            v_curr = v_curr.expand_dims('datetime').assign_coords({'datetime': [ti_dt]})
+            vlist.append(v_curr)
 
     # concatenate the resulting list
     vsubdom = xr.combine_by_coords(vlist)
@@ -108,7 +196,8 @@ def spatialCorrelation2D (ds, x0, y0, ti=None, tf=None, dateref=None):
     jNearest = (abs(ds.y-y0)).argmin().values
     
     print(f'Performing spatial correlation wrt to point ({ds.isel(x=iNearest).x.values}, ' \
-          f'{ds.isel(y=jNearest).y.values}), between {ti} and {tf}.', end='\r', flush=True)
+          f'{ds.isel(y=jNearest).y.values}), between {ti} and {tf}.') #, end='\r', flush=True)
+    sys.stdout.flush()
     
     try:
         mean = ds.sel(datetime=slice(ti,tf)).mean(dim='datetime')
@@ -129,56 +218,6 @@ def spatialCorrelation2D (ds, x0, y0, ti=None, tf=None, dateref=None):
     finalv = finalv/finalv.isel(x=iNearest, y=jNearest)
     
     return finalv
-
-
-
-def averageSubdomains_old(dsv, nSubDomainsX, nSubDomainsY, ds=None):
-    '''
-    Receives the output of `performCorrelationSubDomain` and average accross
-    the different sub-domains
-    
-    Parameters
-    ==========
-    dsv: Dataset
-        Dataset containing the spatial correlation to be averaged
-    ds: Dataset (optional)
-        Original dataset used to compute spatial correlation. Needed for 
-        wind direction. Assumed `wdir` exists. If provided, wdir is part
-        of the output dataset.
-    nSubDomainsX, nSubDomainsY: int
-        Number of subdivisions of the subdomain
-        
-    '''
-    
-    # get window size for wdir averaging
-    window = dsv.datetime[1] - dsv.datetime[0]
-
-    # Get subdomain limits. These are _not_ the overall bounding box.
-    res = (dsv.x[1]-dsv.x[0]).values
-    xmin = dsv.x.min().values;  xmax = dsv.x.max().values+res
-    ymin = dsv.y.min().values;  ymax = dsv.y.max().values+res
-    xSubDom = np.linspace(xmin, xmax, nSubDomainsX+1)
-    ySubDom = np.linspace(ymin, ymax, nSubDomainsY+1)
-    x0SubDom = (xSubDom[1:] + xSubDom[:-1]) / 2
-    y0SubDom = (ySubDom[1:] + ySubDom[:-1]) / 2
-
-    avgv = []
-    for t, d in enumerate(dsv.datetime):
-        if isinstance(ds, xr.Dataset):  wdir = ds.sel(datetime=slice(d,d+window))['wdir'].mean().values
-        subsubvavg = []
-        subv = dsv.sel(datetime=d)
-        for i in range(len(x0SubDom)):
-            for j in range(len(y0SubDom)):
-                x0 = x0SubDom[i];  y0 = y0SubDom[j]
-                subsubv = subv.sel(x=slice(xSubDom[i],xSubDom[i+1]-1), y=slice(ySubDom[j],ySubDom[j+1]-1)) 
-                subsubvavg.append( subsubv.assign_coords({'x':subsubv.x-x0, 'y':subsubv.y-y0}).expand_dims('datetime') )
-        subsubvavg = xr.concat(subsubvavg, dim='datetime').mean(dim='datetime')
-        subsubvavg = subsubvavg.expand_dims('datetime').assign_coords({'datetime': [d.values]})
-        if isinstance(ds, xr.Dataset):  subsubvavg = subsubvavg.assign({'wdir': ('datetime', [wdir])})
-        avgv.append(subsubvavg)
-    avgv = xr.concat(avgv, dim='datetime')
-
-    return avgv
 
 
 def averageSubdomains(dsv, nSubDomainsX, nSubDomainsY, ds=None,
@@ -204,9 +243,9 @@ def averageSubdomains(dsv, nSubDomainsX, nSubDomainsY, ds=None,
     window = dsv.datetime[1] - dsv.datetime[0]
 
     # Get subdomain limits. These are _not_ the overall bounding box.
-    res = (dsv.x[1]-dsv.x[0]).values
-    xmin = dsv.x.min().values;  xmax = dsv.x.max().values+res
-    ymin = dsv.y.min().values;  ymax = dsv.y.max().values+res
+    resx = (dsv.x[1]-dsv.x[0]).values;  resy = (dsv.y[1]-dsv.y[0]).values
+    xmin = dsv.x.min().values;  xmax = dsv.x.max().values + resx
+    ymin = dsv.y.min().values;  ymax = dsv.y.max().values + resy
     xSubDom = np.linspace(xmin, xmax, nSubDomainsX+1);  xSubDom = xSubDom[nSubDomainsSkipW:len(xSubDom)-nSubDomainsSkipE]
     ySubDom = np.linspace(ymin, ymax, nSubDomainsY+1);  ySubDom = ySubDom[nSubDomainsSkipS:len(ySubDom)-nSubDomainsSkipN]
     x0SubDom = (xSubDom[1:] + xSubDom[:-1]) / 2
@@ -224,9 +263,11 @@ def averageSubdomains(dsv, nSubDomainsX, nSubDomainsY, ds=None,
         for i in range(len(x0SubDom)):
             for j in range(len(y0SubDom)):
                 x0 = x0SubDom[i];  y0 = y0SubDom[j]
-                subsubv = subv.sel(x=slice(xSubDom[i],xSubDom[i+1]-1), y=slice(ySubDom[j],ySubDom[j+1]-1)) 
+                subsubv = subv.sel(x=slice(xSubDom[i],xSubDom[i+1]-resx), y=slice(ySubDom[j],ySubDom[j+1]-resy))
                 subsubvavg.append( subsubv.assign_coords({'x':subsubv.x-x0, 'y':subsubv.y-y0}).expand_dims('datetime') )
-        subsubvavg = xr.concat(subsubvavg, dim='datetime').mean(dim='datetime')
+        # When concatenating, the coordinates may be different by numerical noise. We fix that by using the coordinates
+        # of the first sub-domain by using  join='override'. Related: https://github.com/pydata/xarray/issues/2217
+        subsubvavg = xr.concat(subsubvavg, dim='datetime', join='override').mean(dim='datetime')
         subsubvavg = subsubvavg.expand_dims('datetime').assign_coords({'datetime': [d.values]})
         if isinstance(ds, xr.Dataset):  subsubvavg = subsubvavg.assign({'wdir': ('datetime', [wdir])})
         avgv.append(subsubvavg)
@@ -274,9 +315,20 @@ def getSpaceCorrAlongWindDir (ds, dsv, nSubDomainsX, nSubDomainsY, var_oi='uu', 
     from windtools.common import calc_wind
     import scipy.interpolate as interp
 
+    # The domain should have an even number of grid points so that we can get the middle one to be centers of subdomains
+    if len(ds.x) % 2 :
+        warnings.warn(f'An even number of x coordinates is required. The dataset provided has {len(ds.x)} x coordinates. '\
+                      f'Removing the last one, x = {ds.x[-1].values}.')
+        ds = ds.isel(x=slice(None,-1))
+    if len(ds.y) % 2 :
+        warnings.warn(f'An even number of y coordinates is required. The dataset provided has {len(ds.y)} y coordinates. '\
+                      f'Removing the last one, y = {ds.y[-1].values}.')
+        ds = ds.isel(y=slice(None,-1))
+
     # Get subdomain limits
-    xmin = ds.x.min().values;  xmax = ds.x.max().values
-    ymin = ds.y.min().values;  ymax = ds.y.max().values
+    resx = (ds.x[1]-ds.x[0]).values;  resy = (ds.y[1]-ds.y[0]).values
+    xmin = ds.x.min().values;  xmax = ds.x.max().values+resx
+    ymin = ds.y.min().values;  ymax = ds.y.max().values+resy
     xSubDom = np.linspace(xmin, xmax, nSubDomainsX+1);  xSubDom = xSubDom[nSubDomainsSkipW:len(xSubDom)-nSubDomainsSkipE]
     ySubDom = np.linspace(ymin, ymax, nSubDomainsY+1);  ySubDom = ySubDom[nSubDomainsSkipS:len(ySubDom)-nSubDomainsSkipN]
     x0SubDom = (xSubDom[1:] + xSubDom[:-1]) / 2
@@ -300,7 +352,7 @@ def getSpaceCorrAlongWindDir (ds, dsv, nSubDomainsX, nSubDomainsY, var_oi='uu', 
 
     for t, d in enumerate(dsv.datetime):
         print(f'Processing time {d.values}')
-        subv_long = [];  subv_tran = []; 
+        subv_long = [];  subv_tran = [];
         subv = dsv.sel(datetime=d)
         wdir = ds.sel(datetime=slice(d,d+window))[wdirvar].mean().values
 
@@ -338,41 +390,52 @@ def getSpaceCorrAlongWindDir (ds, dsv, nSubDomainsX, nSubDomainsY, var_oi='uu', 
                 linetran = np.linspace(0, ((xxtran[-1]-xxtran[0])**2 + (yytran[-1]-yytran[0])**2)**0.5, num=len(v_tran) )
 
                 # Center line around the central point being at 0
-                linelong = linelong - linelong[np.argmax(v_long)]
-                linetran = linetran - linetran[np.argmax(v_tran)]
+                linelong_old = linelong - linelong[np.argmax(v_long)]
+                linetran_old = linetran - linetran[np.argmax(v_tran)]
+                linelong = linelong - linelong[np.argmin(abs(v_long-1))]
+                linetran = linetran - linetran[np.argmin(abs(v_tran-1))]
+                if np.argmax(v_long) != np.argmin(abs(v_long-1)):
+                    print(f'Long: Other values are larger than 1. In old method, the central position is {np.argmax(v_long)}; the new, {np.argmin(abs(v_long-1))}')
+                if np.argmax(v_tran) != np.argmin(abs(v_tran-1)):
+                    print(f'Tran: Other values are larger than 1. In old method, the central position is {np.argmax(v_tran)}; the new, {np.argmin(abs(v_tran-1))}')
 
-                # Concatenate results for current time interval      
+                # Concatenate results for current time interval
                 subv_long.append(v_long)
                 subv_tran.append(v_tran)
+                
+                assert abs(np.split(v_long,2)[1][0]-1)<0.001, f'The long correlation of sub-domain x={xSubDom[i]}:{xSubDom[i+1]}, '\
+                                                              f'y={ySubDom[j]}:{ySubDom[j+1]} is {np.split(v_long,2)[1][0]}'
+                assert abs(np.split(v_tran,2)[1][0]-1)<0.001, f'The tran correlation of sub-domain x={xSubDom[i]}:{xSubDom[i+1]}, '\
+                                                              f'y={ySubDom[j]}:{ySubDom[j+1]} is {np.split(v_tran,2)[1][0]}'
 
         subv_long = np.mean(subv_long, axis=0)
         subv_tran = np.mean(subv_tran, axis=0)
 
+        assert abs(np.split(subv_long,2)[1][0]-1)<0.001, f'The long correlation of subdomain-average is {np.split(subv_long,2)[1][0]}'
+        assert abs(np.split(subv_tran,2)[1][0]-1)<0.001, f'The tran correlation of subdomain-average is {np.split(subv_tran,2)[1][0]}'
+        
         # Get values onto a common line for plotting
         tv_long.append(np.interp(tlinelong, linelong, subv_long))
         tv_tran.append(np.interp(tlinetran, linetran, subv_tran))
+        
 
         # Calculate the integral length scale of the chunk-average
         L_long.append(np.trapz(tv_long[t], tlinelong))
         L_tran.append(np.trapz(tv_tran[t], tlinetran))
-
 
         # Calculate the integral length scale of the chunk-average. Only getting the right-half for the integral
         v_long = np.split(tv_long[t], 2)[1]
         v_tran = np.split(tv_tran[t], 2)[1]
         x_long = np.split(tlinelong, 2)[1]
         x_tran = np.split(tlinetran, 2)[1]
+        
+        #print(f'v_tran after split is {v_tran}')
 
         assert abs(x_long[0])<0.001, f'The spatial dimention should be 0; it curently is {x_long[0]}'
         assert abs(x_tran[0])<0.001, f'The spatial dimention should be 0; it curently is {x_tran[0]}'
         assert abs(v_long[0]-1)<0.001, f'The correlation of the central point should be 1; it curently is {v_long[0]}'
-        #if abs(v_tran[0]-1)>0.001:
-        #    # ad-hoc catch of a FINO case for 2x2 sub-domains that was not working
-        #    print(f'{v_tran[0:10]}')
-        #    print(f'The correlation of central point should be 1; it curently is {v_tran[0]}. Trying to get the next position instead.')
-        #    print(f'The value of the correlation in {x_tran[1]} is {v_tran[1]}')
-        #    v_tran = v_tran[1:]
         assert abs(v_tran[0]-1)<0.001, f'The correlation of the central point should be 1; it curently is {v_tran[0]}'
+
         # get instant that crosses zero
         pos0cross_long = np.argmax(v_long<0)
         pos0cross_tran = np.argmax(v_tran<0)
@@ -400,7 +463,6 @@ def getSpaceCorrAlongWindDir (ds, dsv, nSubDomainsX, nSubDomainsY, var_oi='uu', 
             L_tran_5pc.append(np.trapz(v_tran, x_tran))
         else:
             L_tran_5pc.append(np.trapz(v_tran[:pos5pccross_tran], x_tran[:pos5pccross_tran]))
-            
 
         # Calculate the integral time scale based on the int length scale and space-mean windspeed
         # We don't know if the dataset given has u_ and v_ or u and v:
@@ -419,6 +481,5 @@ def getSpaceCorrAlongWindDir (ds, dsv, nSubDomainsX, nSubDomainsY, var_oi='uu', 
 
     return {'v_long':tv_long, 'v_tran':tv_tran, 'x_long':tlinelong, 'x_tran':tlinetran, 'L_long':L_long, 'L_tran':L_tran, \
             'tau_long':tau_long, 'tau_tran':tau_tran, 'L_long_':L_long_, 'L_tran_':L_tran_, \
-            'tau_long_':tau_long_, 'tau_long_5pc':tau_long_5pc, 'L_long_5pc':L_long_5pc, 'L_tran_5pc':L_tran_5pc }
-
-
+            'tau_long_':tau_long_, 'tau_long_5pc':tau_long_5pc, 'L_long_5pc':L_long_5pc, 'L_tran_5pc':L_tran_5pc
+           }
