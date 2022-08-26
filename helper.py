@@ -3,6 +3,10 @@
 # workflow. Putting them here for convenience-- no need to copy and paste them
 # onto new notebooks
 #
+# Add to notebooks using
+#   sys.path.append(os.path.abspath('/home/rthedin/utilities/'))
+#   from helper import addScalebar, myupdraftscale
+
 # Regis Thedin
 # Oct 18, 2021
 #
@@ -14,6 +18,37 @@ import os, sys
 from scipy.interpolate import griddata
 
 from mmctools.helper_functions import covariance, calc_wind, calc_spectra
+
+
+def myupdraftscale(vmin=-1, vmax=1):
+    '''
+    Custom colormap for updraft with threshold. Threshold constant at 0.75 m/s
+
+    Instructions:
+        vmin=-1; vmax=1
+        ax.pcolormesh(xx, yy, val, vmin=vmin, vmax=vmax, cmap=myupdraftscale(vmin=vmin,vmax=vmax))
+    '''
+    from matplotlib import pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
+
+    # Discretize colormap
+    thresh=0.75
+    nColorsTot = int( (vmax-vmin)*100 ) # 200
+    nColors_075above  = int( nColorsTot*((vmax-thresh)/vmax) )
+    nColors_0_075     = int( nColorsTot*(thresh/vmax) )
+    nColors_m075_0    = int( nColorsTot*(thresh/(-vmin)) )
+    nColors_m075below = int( nColorsTot*((vmin+thresh)/vmin) )
+    
+    # Yellow part, > 0.75
+    myYelo = plt.cm.autumn_r(np.linspace(0, 0.6, nColors_075above))
+    # Mid part, between -0.75, +0.75
+    myRdBu = plt.cm.RdBu_r(np.linspace(0, 1, nColors_0_075+nColors_m075_0))
+    # Light blue part, <-0.75
+    myBu = plt.cm.cool_r(np.linspace(0.4, 1, nColors_m075below))
+    
+    cmap = LinearSegmentedColormap.from_list('mycmap',np.vstack((myBu, myRdBu, myYelo)))
+    
+    return cmap
 
 def interpolate_to_heights(df,heights):
     """
@@ -179,6 +214,25 @@ def calc_spectra_chunks(ds, times, interval, window_length, spectra_dim,level_di
         spectra['time'] = pd.to_datetime(tstart)
         spectra = spectra.expand_dims('time').assign_coords({'time':[pd.to_datetime(tstart)]})
         dflist.append(spectra)
+
+    # When we give data, say, from 01:00:00 to 03:59:59 and ask for '60min' interval, the last
+    # 1-hour chunk will have ever so slightly different frequencies, resulting in double the total
+    # amount of frequencies. Here we take the freqencies of the first chunk and make sure all of
+    # the other chunks have the very same frequency. If not, but they're really close, replace the
+    # frequencies of the current chunk with that of the first.
+    freq = dflist[0].frequency
+    for i in range(len(dflist)):
+        if np.array_equal(freq, dflist[i].frequency):
+            pass
+        else:
+            if np.allclose(freq, dflist[i].frequency, rtol=1e-10):
+                dflist[i] = dflist[i].assign_coords({"frequency":freq})
+            else:
+                print(f'WARNING: The spectra list related to different chunks have different',\
+                       'frequencies that are not within numerical tolerance. The resulting',\
+                       'concatenated spectra might have NaNs on the last frequency. Check it.')
+
+
 
     df_spectra = xr.concat(dflist,dim='time')
     return df_spectra
