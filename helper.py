@@ -238,15 +238,21 @@ def calc_spectra_chunks(ds, times, interval, window_length, spectra_dim,level_di
     return df_spectra
 
 
-def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True):
+def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCoriolis=False, refheight=80):
     '''
-    Calculate streamwise and cross stream velocity components
+    Calculate streamwise and cross stream velocity components.
+    
+    By default, calculates the streamwise and cross stream of every height using the wdir
+    at that height, which means the cross-stream component will be close to zero at every
+    height (no Coriolis will be apparent). Alternatively, the option showCorilios uses a
+    reference height to calculate the wdir. This way, Coriolis will be apparent and the
+    cross-stream component will only be close to zero at the reference height.
     
     Parameters
     ==========
     df : Dataset
         Dataset containing the u, v, w with at least datetime coordinate
-    dfdir : Dataset, DataArray, or dataframe
+    dfwdir : Dataset, DataArray, or dataframe
         Dataset containing planar-average wind direction
     height: scalar
         If the input dataset only exists in one height (e.g. from VTKs),
@@ -254,7 +260,11 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True):
     extrapolateHeights: bool
         Whether or not to extrapolate the wdir from heights given in dfwdir
         onto the heights asked in df. Useful if vertical slices that contain 
-        all heights. True by default.
+        all heights. Only used if showCoriolis is False. True by default.
+    showCoriolis: bool
+        Whether of not to use a single wdir at `refheight` to rotate the flow
+    refheight: scalar
+        Referente height to use if `showCoriolis` is True
       
     '''
     
@@ -274,7 +284,7 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True):
 
     # Interpolate wdir from planar average into the coordinates of df
     if 'height' in list(df.variables.keys()):
-        heightInterp = height=df.height
+        heightInterp = height = df.height
     elif 'z' in list(df.variables.keys()):
         heightInterp = df.z
     elif height != None:
@@ -282,14 +292,29 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True):
     else:
         raise NameError("The input dataset does not appear to have a 'height' or 'z' coordinate. Use `height=<scalar>` to specify one.")
         
+    if showCoriolis:
+        # Force all the interpolation heights to be the reference height
+        heightInterp = np.repeat(refheight, len(heightInterp))
+
     if extrapolateHeights:
         wdir_at_same_coords = dfwdir.interp(datetime=df.datetime, height=heightInterp, kwargs={"fill_value": "extrapolate"})
     else:
         wdir_at_same_coords = dfwdir.interp(datetime=df.datetime, height=heightInterp)
-    
-    # Add wdir information to main dataset
-    rotdf = xr.combine_by_coords([df, wdir_at_same_coords])
-    wdir = rotdf['wdir']
+     
+
+    if showCoriolis:
+        # Rename for clarity and drop height from coordinates since it no longer varies with height
+        wdir_at_same_coords = wdir_at_same_coords.rename({'wdir': f'wdirAt{refheight}'})
+        wdir_at_same_coords = wdir_at_same_coords.isel(height=1).squeeze()
+
+        # Add wdir information to main dataset
+        rotdf = xr.combine_by_coords([df, wdir_at_same_coords])
+        wdir = rotdf[f'wdirAt{refheight}']
+    else:
+        # Add wdir information to main dataset
+        rotdf = xr.combine_by_coords([df, wdir_at_same_coords])
+        wdir = rotdf['wdir']
+
     
     # Rotate flowfield
     ustream = rotdf['u']*np.cos(np.deg2rad(270-wdir)) + rotdf['v']*np.sin(np.deg2rad(270-wdir))
