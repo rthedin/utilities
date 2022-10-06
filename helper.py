@@ -17,12 +17,12 @@ import xarray as xr
 import os, sys
 from scipy.interpolate import griddata
 
-from mmctools.helper_functions import covariance, calc_wind, calc_spectra
+#from mmctools.helper_functions import covariance, calc_wind, calc_spectra
 
 
-def myupdraftscale(vmin=-1, vmax=1):
+def myupdraftscale(vmin=-1, vmax=1, thresh=0.85):
     '''
-    Custom colormap for updraft with threshold. Threshold constant at 0.75 m/s
+    Custom colormap for updraft with threshold. Threshold constant at 0.85 m/s
 
     Instructions:
         vmin=-1; vmax=1
@@ -32,21 +32,32 @@ def myupdraftscale(vmin=-1, vmax=1):
     from matplotlib.colors import LinearSegmentedColormap
 
     # Discretize colormap
-    thresh=0.75
     nColorsTot = int( (vmax-vmin)*100 ) # 200
-    nColors_075above  = int( nColorsTot*((vmax-thresh)/vmax) )
-    nColors_0_075     = int( nColorsTot*(thresh/vmax) )
-    nColors_m075_0    = int( nColorsTot*(thresh/(-vmin)) )
-    nColors_m075below = int( nColorsTot*((vmin+thresh)/vmin) )
+    nColors_075above  = max(0, int( nColorsTot*((vmax-thresh)/vmax) ))
+    nColors_0_075     = max(0, int( nColorsTot*(thresh/vmax) ))
+    try:
+        nColors_m075_0    = int( nColorsTot*(thresh/(-vmin)) )
+    except ZeroDivisionError:
+        nColors_m075_0 = 0
+    try:
+        nColors_m075below = int( nColorsTot*((vmin+thresh)/vmin) )
+    except ZeroDivisionError:
+        nColors_m075below = 0
     
     # Yellow part, > 0.75
     myYelo = plt.cm.autumn_r(np.linspace(0, 0.6, nColors_075above))
-    # Mid part, between -0.75, +0.75
-    myRdBu = plt.cm.RdBu_r(np.linspace(0, 1, nColors_0_075+nColors_m075_0))
+    myGree = plt.cm.Greens(np.linspace(0.2, 1, nColors_075above))
+    myPurp = plt.cm.Purples(np.linspace(0.2, 1, nColors_075above))
+    # Mid positive part, between 0, +0.75
+    myRd_pos = plt.cm.RdBu_r(np.linspace(0.5, 1, nColors_0_075))
+    # Mid negative part, between -0.75, 0
+    myBu_neg = plt.cm.RdBu_r(np.linspace(0, 0.5, nColors_m075_0))
     # Light blue part, <-0.75
     myBu = plt.cm.cool_r(np.linspace(0.4, 1, nColors_m075below))
     
-    cmap = LinearSegmentedColormap.from_list('mycmap',np.vstack((myBu, myRdBu, myYelo)))
+    concatColors = np.vstack((myBu, myBu_neg, myRd_pos, myPurp))
+    #cmap = LinearSegmentedColormap.from_list('updraft',np.vstack((myBu, myBu_neg, myRd_pos, myYelo)))
+    cmap = LinearSegmentedColormap.from_list('updraft',concatColors)
     
     return cmap
 
@@ -124,6 +135,7 @@ def calc_stats(df,offset='10min'):
     Calculate statistics for a given data frame
     and return a new dataframe
     """
+    from mmctools.helper_functions import covariance
     # calculate statistical quantities on unstacked 
     unstacked = df.unstack()
     stats = unstacked.resample(offset).mean().stack()
@@ -339,6 +351,7 @@ def calc_coherence(s1,s2, interval='120min', window_length='10min', window='hamm
         variable
         
     '''
+    from mmctools.helper_functions import calc_spectra
     
     if isinstance(s1, dict):
         if not isinstance(s2,dict):
