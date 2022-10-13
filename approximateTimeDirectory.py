@@ -1,27 +1,29 @@
 #!/home/rthedin/.conda/envs/ssrs_env_scratch/bin/python
 
 # ----------------------------------------------------------------------- #
-# approximateTimeDirectory.py
-#
-# Approximate time directories to nearest decimal. Starting, ending and
-#
-# Example call:
-# approximateTimeDirectory.py <precision> [<tolerance>]
-# where precision is the number of decimal digits to accomodate the time
-# step used. It is usually 2 or 3. Tolerance is optional.
-# Example call:
-#    cd postProcessing/Low
-#    approximateTimeDirectory.py 2
-#    approximateTimeDirectory.py 0 0.1
-# The last example above refers to a case where you have already rounded
-# the values, but instead of getting, say, 100, 200, 300, you got 100, 
-# 199.9, 299.9, due to the way OpenFOAM saved the sampling. So you want
-# to run again and give 0 precision (essentially integers), but now the
-# tolerance for approximating 199.9 to 200 needs to be changed.
-#
-# Regis Thedin
-# Aug 22, 2022
-# regis.thedin@nrel.gov
+# approximateTimeDirectory.py                                             #
+#                                                                         #
+# Approximate time directories.                                           #
+#                                                                         #
+# Usage:                                                                  #
+# approximateTimeDirectory.py <precision> [<tolerance>]                   #
+# where precision is the number of decimal digits to accomodate the time  #
+# step used, usually 2 or 3. Tolerance is optional, and defaults to 1e-5  #
+#                                                                         #
+# Example call:                                                           #
+#    cd postProcessing/Low                                                #
+#    approximateTimeDirectory.py 2                                        #
+#    approximateTimeDirectory.py 0 0.1                                    #
+# The last example above refers to a case where you have already rounded  #
+# the values, however instead of getting, for example, 100, 200, and 300, #
+# you got 100, 199.9, and 299.9, due to the way the sampling directories  #
+# were saved by OpenFOAM. So you want to run it again and give precision  #
+# 0 (meaning integers), but now the tolerance for approximating 199.9 to  #
+# 200 needs to be changed. The optional third argument is the tolerance.  #
+#                                                                         #
+# Regis Thedin                                                            #
+# Aug 22, 2022                                                            #
+# regis.thedin@nrel.gov                                                   #
 # ----------------------------------------------------------------------- #
 import os, sys
 import numpy as np
