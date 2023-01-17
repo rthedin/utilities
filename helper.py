@@ -18,7 +18,40 @@ import os, sys
 from scipy.interpolate import griddata
 
 #from mmctools.helper_functions import covariance, calc_wind, calc_spectra
-
+str_var_common = {
+    "TKE"  : "TKE",
+    "TI"   : "TI",
+    "TI_TKE":"TI_TKE",
+    "u*"   : "u*",
+}
+str_var_sowfa = {
+    "wspd" : "wspd",
+    "wdir" : "wdir",
+    "uv"   : "uv",
+    "vw"   : "vw",
+    "uw"   : "uw",
+    "uu"   : "uu",
+    "vv"   : "vv",
+    "ww"    : "ww",
+    "u"    : "u",
+    "v"    : "v",
+    "w"    : "w",
+    **str_var_common
+}
+str_var_amr = {
+    "wspd" : "hvelmag",
+    "wdir" : "wdir",
+    "uv"   : "u'v'_r",
+    "vw"   : "v'w'_r",
+    "uw"   : "u'w'_r",
+    "uu"   : "u'u'_r",
+    "vv"   : "v'v'_r",
+    "ww"   : "w'w'_r",
+    "u"    : "u",
+    "v"    : "v",
+    "w"    : "w",
+    **str_var_common
+}
 
 def myupdraftscale(vmin=-1, vmax=1, thresh=0.85):
     '''
@@ -55,7 +88,13 @@ def myupdraftscale(vmin=-1, vmax=1, thresh=0.85):
     # Light blue part, <-0.75
     myBu = plt.cm.cool_r(np.linspace(0.4, 1, nColors_m075below))
     
-    concatColors = np.vstack((myBu, myBu_neg, myRd_pos, myPurp))
+    # Another totally different one, colorbind-safe. orange-blue
+    myOra_pos = plt.cm.Oranges(np.linspace(0, 1, nColors_0_075))
+    myBlue  = plt.cm.Blues(np.linspace(0.2, 1, nColors_075above))
+    concatColors = np.vstack((myBu, myBu_neg, myOra_pos, myBlue))
+
+
+    #concatColors = np.vstack((myBu, myBu_neg, myRd_pos, myGree)) # red-green for >0 values
     #cmap = LinearSegmentedColormap.from_list('updraft',np.vstack((myBu, myBu_neg, myRd_pos, myYelo)))
     cmap = LinearSegmentedColormap.from_list('updraft',concatColors)
     
@@ -154,18 +193,27 @@ def calc_stats(df,offset='10min'):
 
 
 # from https://github.com/a2e-mmc/assessment/blob/study/coupling_comparison/studies/coupling_comparison/helpers.py
-def calc_QOIs(df):
+def calc_QOIs(df, code='sowfa'):
     """
     Calculate derived quantities (IN PLACE)
     """
-    from mmctools.helper_functions import covariance, calc_wind 
-    if 'wspd' not in df.keys() and 'wdir' not in df.keys():
-        df['wspd'],df['wdir'] = calc_wind(df)
-    df['u*'] = (df['uw']**2 + df['vw']**2)**0.25
-    df['TKE'] = 0.5*(df['uu'] + df['vv'] + df['ww'])
-    ang = np.arctan2(df['v'],df['u'])
-    df['TI'] = df['uu']*np.cos(ang)**2 + 2*df['uv']*np.sin(ang)*np.cos(ang) + df['vv']*np.sin(ang)**2
-    df['TI'] = np.sqrt(df['TI']) / df['wspd']
+    if code == 'sowfa':
+        str_var = str_var_sowfa
+    elif code == 'amr' or code == 'amrwind':
+        str_var = str_var_amr
+    else:
+        raise ValueError("Code options: 'sowfa', 'amr'")
+
+    from mmctools.helper_functions import calc_wind 
+    if str_var['wspd'] not in df.keys() and str_var['wdir'] not in df.keys():
+        df[str_var['wspd']],df[str_var['wdir']] = calc_wind(df,u=str_var['u'],v=str_var['v'])
+    df[str_var['u*']] = (df[str_var['uw']]**2 + df[str_var['vw']]**2)**0.25
+    df[str_var['TKE']] = 0.5*(df[str_var['uu']] + df[str_var['vv']] + df[str_var['ww']])
+    ang = np.arctan2(df[str_var['v']],df[str_var['u']])
+    df[str_var['TI']] = df[str_var['uu']]*np.cos(ang)**2 + 2*df[str_var['uv']]*np.sin(ang)*np.cos(ang) + df[str_var['vv']]*np.sin(ang)**2
+    df[str_var['TI']] = np.sqrt(df[str_var['TI']]) / df[str_var['wspd']]
+    # TI as typical equations, based on TKE (same as AMR-Wind's TI TKE)
+    df[str_var['TI_TKE']] = np.sqrt((df[str_var['uu']]+df[str_var['vv']]+df[str_var['ww']])/3.0)/np.sqrt(df[str_var['u']]**2 + df[str_var['v']]**2)
 
 
 
