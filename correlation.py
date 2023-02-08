@@ -109,7 +109,7 @@ def performCorrelationSubDomain (ds, nSubDomainsX, nSubDomainsY, ti, tf, dateref
     return vsubdom
 
 
-def performCorrelationSubDomainPar (fullPathToNc, nSubDomainsX, nSubDomainsY, ti, dateref, window, inc):
+def performCorrelationSubDomainPar (fullPathToNc, nSubDomainsX, nSubDomainsY, ti, dateref, window, inc, var=None):
     '''
     Same as above, but for parallel computations.
     '''
@@ -117,8 +117,16 @@ def performCorrelationSubDomainPar (fullPathToNc, nSubDomainsX, nSubDomainsY, ti
     assert isinstance(nSubDomainsX, int), "Number of subdomains should be an integer"
     assert isinstance(nSubDomainsY, int), "Number of subdomains should be an integer"
 
+    if var is None:
+        var = ['u_','v_','w']
+
     VTKz = xr.open_dataset(fullPathToNc)
-    ds = VTKz[['u_','v_','w']].copy()
+    try:
+        ds = VTKz[var].copy()
+    except KeyError:
+        print("Could not find variables u_, v_, w. Using u, v, w instead. Make sure those are the streamwise",
+              " and cros-stream components. Otherwise, specify desired variables using var=['ux','vy']")
+        ds = VTKz[['u','v','w']].copy()
 
     # The domain should have an even number of grid points so that we can get the middle one to be centers of subdomains
     if len(ds.x) % 2 :
