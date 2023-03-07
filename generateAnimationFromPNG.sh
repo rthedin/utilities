@@ -32,7 +32,7 @@ generateAnimationFromPNG(){
     uniqueSlices=$(for file in *.png; do echo "${file%.*.png}"; done | sort -u)
 
     for slice in $uniqueSlices; do
-        yes | /home/rthedin/share/ffmpeg-git-20191022-amd64-static/ffmpeg -framerate $frate -i ${slice}.0%3d.png -vcodec libx264 -crf 15 -pix_fmt yuv420p -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" video_${slice}.mp4
+        yes | /home/rthedin/share/ffmpeg-git-20191022-amd64-static/ffmpeg -framerate $frate -i ${slice}.%4d.png -vcodec libx264 -crf 15 -pix_fmt yuv420p -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" video_${slice}.mp4
     done
 
 }
