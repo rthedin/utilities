@@ -43,7 +43,7 @@ from itertools import repeat
 from multiprocessing import Pool, freeze_support
 from windtools.amrwind.post_processing  import Sampling, addDatetime
 
-def main(samplingplanefile, pppath, outpath, dt, itime, ftime):
+def main(samplingplanefile, pppath, outpath, dt, itime, ftime, steptime):
 
     # -------- CONFIGURE RUN
     samplingplanepath = os.path.join(pppath,samplingplanefile)
@@ -81,8 +81,8 @@ def main(samplingplanefile, pppath, outpath, dt, itime, ftime):
         ftime = s.ndt
 
     # Split all the time steps in arrays of roughly the same size
-    chunks =  np.array_split(range(itime,ftime), 6)
-    # Now, get the beggining and end of each separate chunk
+    chunks =  np.array_split(range(itime,ftime), 32)
+    # Now, get the beginning and end of each separate chunk
     itime_list = [i[0]    for i in chunks]
     ftime_list = [i[-1]+1 for i in chunks] 
     print(f'itime_list is {itime_list}')
@@ -92,15 +92,25 @@ def main(samplingplanefile, pppath, outpath, dt, itime, ftime):
     ds_ = p.starmap(s.read_single_group, zip(repeat(group),         # group
                                              itime_list,            # itime
                                              ftime_list,            # ftime
-                                             repeat(1),             # step
+                                             repeat(steptime),      # step
                                              repeat(None),          # outputPath
                                              repeat(['u','v','w']), # var
                                              repeat(True),          # simCompleted
                                              repeat(False),         # verbose
                                             )
                                          )
+    # Note: For some unknown reason, after saving the combined array, it is like the
+    #       ds_ array was already chunked. So if I request 50 time steps, it will be
+    #       chunked as (7, 7, 7, 7, 7, 7, 7, 1) in one of the coordines (7*7+1=50).
+    #       The issue appears then we try to save the combined array, which means the
+    #       chunk in the same dimension now will be (7, 7, ...7, 1, 7, 7, ...), with
+    #       the ds_ chunking just concatenated. When we try to save that to a single
+    #       zarr file, it complains because only the last chunk can be different. I
+    #       noticed it seems to always split it in 8 chunks, so if we pass a number
+    #       of dt that is divisible by 8, then we do not run into this issue. The
+    #       number of threads is also locked at 32 since 32%8=0, to avoid further
+    #       issues
 
-    print(ds_)
     print('Starmap call done. Combining array')
     comb_ds_ = xr.combine_by_coords(ds_)  # combine in `samplingtimestep`
     print('Done combining array.')
@@ -112,7 +122,7 @@ def main(samplingplanefile, pppath, outpath, dt, itime, ftime):
         comb_ds_['vmean'] = comb_ds_['v'].mean(dim='samplingtimestep')
         comb_ds_['wmean'] = comb_ds_['w'].mean(dim='samplingtimestep')
 
-    print('Saving to zarr')
+    print('Saving combined array to zarr')
     comb_ds_.to_zarr(outputzarr)
 
     print('Done with reshaping and saving xarray.')
@@ -121,17 +131,21 @@ def main(samplingplanefile, pppath, outpath, dt, itime, ftime):
         print(f'Now calculating fluctuating part and adding datetime. Using dt = {dt}')
 
         outputdatetimezarr = os.path.join(outpath, f'{group}_datetime_mean.zarr')
+        outputdatetimenc   = os.path.join(outpath, f'{group}_datetime_mean.nc')
         if os.path.isdir(outputdatetimezarr):
             raise ValueError(f'The follwoing target zarr file already exists: {outputdatetimezarr}')
 
         comb_ds = addDatetime(comb_ds_, dt=dt)
-        comb_ds.to_zarr(outputdatetimezarr)
+        print(f'Writing {outputdatetimezarr}')
+        try:
+            comb_ds.to_zarr(outputdatetimezarr)
+        except ValueError:
+            print(f'Zarr is complaining about uniform chunk sizes. Saving it as netcdf instead')
+            comb_ds.to_netcdf(outputdatetimenc)
+        print(f'Done writing the datetime/mean output file.')
 
-    if chunkedSaving == False:
-        # Compute chunked mean quantities to make it easier to get fluctuating part later
 
 
-    print('--- Done.')
 
 if __name__ == '__main__':
 
@@ -153,16 +167,19 @@ if __name__ == '__main__':
                         help="sampling time step to start saving the data")
     parser.add_argument("--ftime", "-ftime",  type=int, default=-1,
                         help="sampling time step to end saving the data")
+    parser.add_argument("--steptime", "-step",  type=int, default=1,
+                        help="sampling time step increment to save the data")
 
     args = parser.parse_args()
 
     # Parse inputs
-    path   = args.path
-    ncfile = args.ncfile
-    dt     = args.dt
-    group  = args.group
-    itime  = args.itime
-    ftime  = args.ftime
+    path     = args.path
+    ncfile   = args.ncfile
+    dt       = args.dt
+    group    = args.group
+    itime    = args.itime
+    ftime    = args.ftime
+    steptime = args.steptime
 
     # ------------------------------------------------------------------------------
     # --------------------------- DONE PARSING INPUTS ------------------------------
@@ -200,6 +217,9 @@ if __name__ == '__main__':
     if dt is not None and  not isinstance(dt,(float,int)):
         raise ValueError(f'dt should be a scalar.')
 
+    if steptime < 1:
+        raise ValueError(f'The time step increment should be >= 1.')
+
     if itime < 0:
         raise ValueError(f'The initial time step should be >= 0.')
 
@@ -208,6 +228,10 @@ if __name__ == '__main__':
             raise ValueError(f'The final time step should be larger than the',\
                              f'initial. Received itime={itime} and ftime={ftime}.')
     if itime!=0 or ftime!=-1:
+        if ((ftime-itime)/steptime)%8 !=0:
+            raise ValueError(f'Due to the inner workings of zarr and the default',\
+                             f'chunking, the amount of times requested should be a',\
+                             f'multiple of 8. Received {int((ftime-itime)/steptime)}')
         if dt is not None:
             raise ValueError(f'Performing chunked saving. Computing fluctuating',\
                              f'component is not supported. Skip dt specification.')
@@ -220,6 +244,6 @@ if __name__ == '__main__':
 
     print(f'Starting job at {time.ctime()}')
     freeze_support()
-    main(ncfile, pppath, outpath, dt, itime, ftime)
+    main(ncfile, pppath, outpath, dt, itime, ftime, steptime)
     print(f'Ending job at   {time.ctime()}')
 
