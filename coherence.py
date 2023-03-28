@@ -73,6 +73,7 @@ def calc_coherence_2signals(s1,s2, strname=None, interval='120min', window_lengt
                                f"closest z is {s2['ds'].z.sel(z=s2['z'],method='nearest').values}")
             raise
 
+
     if strname == 'vert':
         if s1['y'] != s2['y']:
             raise ValueError(f"Requested vertical separation but points have different y value: {s1['y']} and {s2['y']}")
@@ -91,7 +92,6 @@ def calc_coherence_2signals(s1,s2, strname=None, interval='120min', window_lengt
     signals = xr.merge([ sig1['up'].to_dataset(name='u1'), sig1['vp'].to_dataset(name='v1'), sig1['wp'].to_dataset(name='w1'),
                          sig2['up'].to_dataset(name='u2'), sig2['vp'].to_dataset(name='v2'), sig2['wp'].to_dataset(name='w2') ])
 
-        
     psd = calc_spectra(signals,
                        var_oi=['u1','u2','v1','v2','w1','w2'],
                        xvar_oi=[('u1','u2'),('v1','v2'),('w1','w2')],
@@ -205,12 +205,12 @@ def plotCoherence(coh_sep, sep_list, meandim, umean=None, xaxis='freq', **kwargs
         axs[0,0].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'mscoh_{cohsepstr}sep_u1u2'], c=colors[c%len(colors)], label=f'{sep}')
         if umean is not None:
             #axs[0,0].plot(f, IECCoherence(f,umean,delta=sep,component='u',mode='sameValues'), c=colors[c%len(colors)], ls='--', alpha=0.7)
-            axs[0,0].plot(f, davenportExpCoh(f,u=umean,delta=sep,Lc='defaultu',**kwargs), c=colors[c%len(colors)], ls='--', alpha=0.7)
+            axs[0,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',**kwargs), c=colors[c%len(colors)], ls='--', alpha=0.7)
         # co-coh uu
         axs[0,1].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'cocoh_{cohsepstr}sep_u1u2'], c=colors[c%len(colors)], label=f'{sep}')
         if umean is not None:
             #axs[0,1].plot(f, IECCoherence(f,umean,delta=sep,component='u',mode='sameValues'), c=colors[c%len(colors)], ls='--', alpha=0.7)
-            axs[0,1].plot(f, davenportExpCoh(f,u=umean,delta=sep,Lc='defaultu',**kwargs), c=colors[c%len(colors)], ls='--', alpha=0.7)
+            axs[0,1].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',**kwargs), c=colors[c%len(colors)], ls='--', alpha=0.7)
         # quad-coh uu
         axs[0,2].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'qucoh_{cohsepstr}sep_u1u2'], c=colors[c%len(colors)], label=f'{sep}')
 
