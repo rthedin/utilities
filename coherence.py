@@ -140,7 +140,7 @@ def calc_coherence_2signals(s1,s2, strname=None, interval='120min', window_lengt
 
 
 
-def plotCoherence(coh_sep, sep_list, meandim, umean=None, xaxis='freq', **kwargs):
+def plotCoherence(coh_sep, sep_list, meandim, umean=None, xaxis='freq', qoi=['ms','co','qu'], **kwargs):
     '''
     Plot mscoh, co-coherence, and quad-coherence from coh_sep dataset
     
@@ -155,8 +155,10 @@ def plotCoherence(coh_sep, sep_list, meandim, umean=None, xaxis='freq', **kwargs
         Mean velocity used to compute IEC coherence. IEC curves are skipped is umean is not specified
     xaxis: str ('freq', or 'redfreq'; default 'freq')
         Quantity to use on the xaxis
-    a, b: float
-        Values for a and B for Davenport's model
+    qoi: str, array of string
+        What quantities to plot. Options: 'ms','co','qu','r' (or 'all' instead).
+    a, b, B: float
+        Values for a and b (or B) for Davenport's model
     
     '''
 
@@ -165,6 +167,17 @@ def plotCoherence(coh_sep, sep_list, meandim, umean=None, xaxis='freq', **kwargs
     # Check what xaxis was requested
     if xaxis not in {'freq','redfreq'}:
         raise ValueError (f'The argument xaxis can only take `freq` or `redfreq`.')
+
+    # Check what plots were requested (mscoh, cocoh, quad, radius)
+    if isinstance(qoi,str):
+        # Single quantity requested (or all)
+        if qoi == 'all':
+            qoi = ['ms','co','qu','r']
+        else:
+            qoi = [qoi]
+    nqoi = len(qoi)
+
+
 
     # Get auxiliary arrays
     colors = list(mcolors.TABLEAU_COLORS)
@@ -193,55 +206,93 @@ def plotCoherence(coh_sep, sep_list, meandim, umean=None, xaxis='freq', **kwargs
         xlim = None
 
         
-    fig, axs = plt.subplots(3,3,figsize=(16,9), sharey=True, sharex=True)
+    fig, axs = plt.subplots(nqoi,3,figsize=(17,nqoi*3), sharey=True, sharex=True, gridspec_kw = {'wspace':0.1, 'hspace':0.1})
 
     for c, sep in enumerate(sep_list):
+        row=0
 
         # get the frequency axis
         if xaxis == 'freq': f = coh_sep.frequency
         else:               f = coh_sep.frequency * sep / umean
 
-        # mscoh uu
-        axs[0,0].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'mscoh_{cohsepstr}sep_u1u2'], c=colors[c%len(colors)], label=f'{sep}')
-        if umean is not None:
-            #axs[0,0].plot(f, IECCoherence(f,umean,delta=sep,component='u',mode='sameValues'), c=colors[c%len(colors)], ls='--', alpha=0.7)
-            axs[0,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',**kwargs), c=colors[c%len(colors)], ls='--', alpha=0.7)
-        # co-coh uu
-        axs[0,1].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'cocoh_{cohsepstr}sep_u1u2'], c=colors[c%len(colors)], label=f'{sep}')
-        if umean is not None:
-            #axs[0,1].plot(f, IECCoherence(f,umean,delta=sep,component='u',mode='sameValues'), c=colors[c%len(colors)], ls='--', alpha=0.7)
-            axs[0,1].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',**kwargs), c=colors[c%len(colors)], ls='--', alpha=0.7)
-        # quad-coh uu
-        axs[0,2].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'qucoh_{cohsepstr}sep_u1u2'], c=colors[c%len(colors)], label=f'{sep}')
+        # get arrays for convenience and readability
+        ms_u = coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'mscoh_{cohsepstr}sep_u1u2']
+        ms_v = coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'mscoh_{cohsepstr}sep_v1v2']
+        ms_w = coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'mscoh_{cohsepstr}sep_w1w2']
+        co_u = coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'cocoh_{cohsepstr}sep_u1u2']
+        co_v = coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'cocoh_{cohsepstr}sep_v1v2']
+        co_w = coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'cocoh_{cohsepstr}sep_w1w2']
+        qu_u = coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'qucoh_{cohsepstr}sep_u1u2']
+        qu_v = coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'qucoh_{cohsepstr}sep_v1v2']
+        qu_w = coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'qucoh_{cohsepstr}sep_w1w2']
 
         # ---------------------
-        # mscoh vv
-        axs[1,0].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'mscoh_{cohsepstr}sep_v1v2'], c=colors[c%len(colors)], label=f'{sep}')
-        # co-coh vv
-        axs[1,1].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'cocoh_{cohsepstr}sep_v1v2'], c=colors[c%len(colors)], label=f'{sep}')
-        # quad-coh vv
-        axs[1,2].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'qucoh_{cohsepstr}sep_v1v2'], c=colors[c%len(colors)], label=f'{sep}')
+        if 'ms' in qoi or 'mscoh' in qoi:
+            # mscoh uu
+            axs[row,0].plot(f, ms_u, c=colors[c%len(colors)], label=f'{sep}')
+            if umean is not None:
+                axs[row,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',**kwargs), c=colors[c%len(colors)], ls='--', alpha=0.7)
+            # mscoh vv
+            axs[row,1].plot(f, ms_v, c=colors[c%len(colors)], label=f'{sep}')
+            # mscoh vv
+            axs[row,2].plot(f, ms_w, c=colors[c%len(colors)], label=f'{sep}')
+            # Set titles
+            if c==0:
+                axs[row,0].text(0.98, 0.97, f'mscoh $\gamma^2_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
+                axs[row,1].text(0.98, 0.97, f'mscoh $\gamma^2_{{vv, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,1].transAxes, fontsize=14)
+                axs[row,2].text(0.98, 0.97, f'mscoh $\gamma^2_{{ww, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,2].transAxes, fontsize=14)
+            row = row+1
+        # ---------------------
 
         # ---------------------
-        # mscoh vv
-        axs[2,0].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'mscoh_{cohsepstr}sep_w1w2'], c=colors[c%len(colors)], label=f'{sep}')
-        # co-coh vv
-        axs[2,1].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'cocoh_{cohsepstr}sep_w1w2'], c=colors[c%len(colors)], label=f'{sep}')
-        # quad-coh vv
-        axs[2,2].plot(f, coh_sep.mean(dim=meandim).sel({sepcoord:sep})[f'qucoh_{cohsepstr}sep_w1w2'], c=colors[c%len(colors)], label=f'{sep}')
+        if 'co' in qoi or 'cocoh' in qoi:
+            # co-coh uu
+            axs[row,0].plot(f, co_u, c=colors[c%len(colors)], label=f'{sep}')
+            if umean is not None:
+                axs[row,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',**kwargs), c=colors[c%len(colors)], ls='--', alpha=0.7)
+            # co-coh vv
+            axs[row,1].plot(f, co_v, c=colors[c%len(colors)], label=f'{sep}')
+            # co-coh ww
+            axs[row,2].plot(f, co_w, c=colors[c%len(colors)], label=f'{sep}')
+            # Set titles
+            if c==0:
+                axs[row,0].text(0.98, 0.97, f'co-coh $\gamma^2_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
+                axs[row,1].text(0.98, 0.97, f'co-coh $\gamma^2_{{vv, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,1].transAxes, fontsize=14)
+                axs[row,2].text(0.98, 0.97, f'co-coh $\gamma^2_{{ww, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,2].transAxes, fontsize=14)
+            row = row+1
+        # ---------------------
 
+        # ---------------------
+        if 'qu' in qoi or 'quadcoh' in qoi:
+            # quad-coh uu
+            axs[row,0].plot(f, qu_u, c=colors[c%len(colors)], label=f'{sep}')
+            # quad-coh vv
+            axs[row,1].plot(f, qu_v, c=colors[c%len(colors)], label=f'{sep}')
+            # quad-coh ww
+            axs[row,2].plot(f, qu_w, c=colors[c%len(colors)], label=f'{sep}')
+            # Set titles
+            if c==0:
+                axs[row,0].text(0.98, 0.97, f'quad-coh $\\rho^2_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
+                axs[row,1].text(0.98, 0.97, f'quad-coh $\\rho^2_{{vv, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,1].transAxes, fontsize=14)
+                axs[row,2].text(0.98, 0.97, f'quad-coh $\\rho^2_{{ww, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,2].transAxes, fontsize=14)
+            row = row+1
+        # ---------------------
 
-    axs[0,0].set_title(f'mscoh $\gamma^2_{{uu, {cohsepstr}}}$', fontsize=13)
-    axs[0,1].set_title(f'co-coh $\gamma_{{uu, {cohsepstr}}}$',  fontsize=13)
-    axs[0,2].set_title(f'quad-coh $\\rho_{{uu, {cohsepstr}}}$', fontsize=13)
-
-    axs[1,0].set_title(f'mscoh $\gamma^2_{{vv, {cohsepstr}}}$', fontsize=13)
-    axs[1,1].set_title(f'co-coh $\gamma_{{vv, {cohsepstr}}}$',  fontsize=13)
-    axs[1,2].set_title(f'quad-coh $\\rho_{{vv, {cohsepstr}}}$', fontsize=13)
-
-    axs[2,0].set_title(f'mscoh $\gamma^2_{{ww, {cohsepstr}}}$', fontsize=13)
-    axs[2,1].set_title(f'co-coh $\gamma_{{ww, {cohsepstr}}}$',  fontsize=13)
-    axs[2,2].set_title(f'quad-coh $\\rho_{{ww, {cohsepstr}}}$', fontsize=13)
+        # ---------------------
+        if 'r' in qoi or 'radiuscoh' in qoi or 'rcoh' in qoi:
+            # radius coh uu
+            axs[row,0].plot(f, (co_u**2+qu_u**2)**0.5, c=colors[c%len(colors)], label=f'{sep}')
+            # radius coh vv
+            axs[row,1].plot(f, (co_v**2+qu_v**2)**0.5, c=colors[c%len(colors)], label=f'{sep}')
+            # radius coh ww
+            axs[row,2].plot(f, (co_w**2+qu_w**2)**0.5, c=colors[c%len(colors)], label=f'{sep}')
+            # Set titles
+            if c==0:
+                axs[row,0].text(0.98, 0.95, f'radius coh $R_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
+                axs[row,1].text(0.98, 0.95, f'radius coh $R_{{vv, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,1].transAxes, fontsize=14)
+                axs[row,2].text(0.98, 0.95, f'radius coh $R_{{ww, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,2].transAxes, fontsize=14)
+            row = row+1
+        # ---------------------
 
 
     if xaxis == 'freq': xlabel = 'freq [Hz]'
@@ -255,7 +306,7 @@ def plotCoherence(coh_sep, sep_list, meandim, umean=None, xaxis='freq', **kwargs
     axs[0,-1].legend(title=f'{sepcoord} (m)', fontsize=12, title_fontsize=13, loc='upper left', bbox_to_anchor=(1,1))
     for ax in axs[-1,:]:  ax.set_xlabel(xlabel, fontsize=14)
     for ax in axs[:,0]:   ax.set_ylabel('coherence', fontsize=14)
-    fig.tight_layout()
+    #fig.tight_layout()
 
 
 def IECCoherence(f, Umeanhub, delta, component, cohexp=0, z=1, hubheight=80, mode='sameValues'):
