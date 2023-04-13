@@ -100,7 +100,7 @@ def myupdraftscale(vmin=-1, vmax=1, thresh=0.85):
     
     return cmap
 
-def interpolate_to_heights(df,heights):
+def interpolate_to_heights(df,heights, timedim='datetime'):
     """
     Interpolate data in dataframe to specified heights
     and return a new dataframe
@@ -115,13 +115,13 @@ def interpolate_to_heights(df,heights):
         heights=[heights]
     
     # Unstack to single height index (= most time-consuming operation)
-    unstacked = df.unstack(level='datetime')
+    unstacked = df.unstack(level=timedim)
     # Interpolate to specified heights
     f = interp1d(unstacked.index,unstacked,axis=0,fill_value='extrapolate')
     for hgt in heights:
         unstacked.loc[hgt] = f(hgt)
     # Restack and set index
-    df_out = unstacked.loc[heights].stack().reset_index().set_index(['datetime','height']).sort_index()
+    df_out = unstacked.loc[heights].stack().reset_index().set_index([timedim,'height']).sort_index()
     return df_out
 
 
@@ -461,10 +461,5 @@ def addScalebar(ax, size_in_m=5000, label='5 km', loc='lower left', color='black
     if hideTicks:
         ax.set_xticks([])
         ax.set_yticks([])
-
-
-
-
-
 
 
