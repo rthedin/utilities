@@ -57,14 +57,17 @@ def readTurbineOutputPar(caseobj, dt_openfast, dt_processing, saveOutput=True,
     if fTurbine-iTurbine <= 0:
         raise ValueError (f'Final turbine to read needs to be larger than initial.')
 
-
+    if fCase-iCase < nCores:
+        print(f'Total number of cases requested ({fCase-iCase}) is lower than number of cores {nCores}.')
+        print(f'Changing the number of cores to {fCase-iCase}.')
+        nCores = fCase-iCase
 
     zarrstore = f'ds_turbineOutput_temp_cond{iCondition}_{fCondition}_case{iCase}_{fCase}_seed{iSeed}_{fSeed}_turb{iTurbine}_{fTurbine}_dt{dt_processing}s.zarr'
     outputzarr = os.path.join(caseobj.path, zarrstore)
 
     if os.path.isdir(outputzarr) and saveOutput:
        print(f'Output file {zarrstore} exists. Attempting to read it..')
-       comb_ds = xr.load_zarr(outputzarr)
+       comb_ds = xr.open_zarr(outputzarr)
        return comb_ds
         
 
@@ -220,14 +223,17 @@ def readFFPlanesPar(caseobj, sliceToRead, verbose=False, saveOutput=True, iCondi
     if fSeed-iSeed <= 0:
         raise ValueError (f'Final seed to read needs to be larger than initial.')
 
-
+    if fCase-iCase < nCores:
+        print(f'Total number of cases requested ({fCase-iCase}) is lower than number of cores {nCores}.')
+        print(f'Changing the number of cores to {fCase-iCase}.')
+        nCores = fCase-iCase
 
     zarrstore = f'ds_{sliceToRead}Slices_temp_cond{iCondition}_{fCondition}_case{iCase}_{fCase}_seed{iSeed}_{fSeed}.zarr'
     outputzarr = os.path.join(caseobj.path, zarrstore)
 
     if os.path.isdir(outputzarr) and saveOutput:
        print(f'Output file {zarrstore} exists. Attempting to read it..')
-       comb_ds = xr.load_zarr(outputzarr)
+       comb_ds = xr.open_zarr(outputzarr)
        return comb_ds
         
 
