@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import os, sys
+import datetime
 from scipy.interpolate import griddata
 
 #from mmctools.helper_functions import covariance, calc_wind, calc_spectra
@@ -298,7 +299,7 @@ def calc_spectra_chunks(ds, times, interval, window_length, spectra_dim,level_di
     return df_spectra
 
 
-def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCoriolis=False, refheight=80):
+def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCoriolis=False, refheight=80, heightvar=None, dateref=None):
     '''
     Calculate streamwise and cross stream velocity components.
     
@@ -325,6 +326,12 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCorio
         Whether of not to use a single wdir at `refheight` to rotate the flow
     refheight: scalar
         Referente height to use if `showCoriolis` is True
+    heightvar: str
+        Name of the variable representing the height. If "height" of "z", no
+        need to be specified. But depending on the vtk read, it could be "y".
+    dateref: datetime64
+        If df dataset has datetime array, this is the dataref needed to align
+        the wdir-containing dataset dfwdir and the main dataset df.
       
     '''
     
@@ -343,12 +350,17 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCorio
     dfwdir = dfwdir.drop(list(varsToDrop))
 
     # Interpolate wdir from planar average into the coordinates of df
-    if 'height' in list(df.variables.keys()):
+    if heightvar is not None:
+        heightInterp = df[heightvar]
+    elif 'height' in list(df.variables.keys()):
         heightInterp = height = df.height
+        heightvar = 'height'
     elif 'z' in list(df.variables.keys()):
         heightInterp = df.z
+        heightvar = 'z'
     elif height != None:
         heightInterp = height
+        heightvar = 'height'
     else:
         raise NameError("The input dataset does not appear to have a 'height' or 'z' coordinate. Use `height=<scalar>` to specify one.")
         
@@ -356,10 +368,36 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCorio
         # Force all the interpolation heights to be the reference height
         heightInterp = np.repeat(refheight, len(heightInterp))
 
+    # Get name of the datetime and height variables
+    if 'datetime' in list(df.variables.keys()):     dfdatetimevar = 'datetime'
+    if 'time'     in list(df.variables.keys()):     dfdatetimevar = 'time'
+    if 'datetime' in list(dfwdir.variables.keys()): dfwdirdatetimevar = 'datetime'
+    if 'time'     in list(dfwdir.variables.keys()): dfwdirdatetimevar = 'time'
+    if 'height'   in list(dfwdir.variables.keys()): dfwdirheightvar = 'height'
+    if 'z'        in list(dfwdir.variables.keys()): dfwdirheightvar = 'z'
+
+    # The df dataset can have its time/datetime coordinates in datetime64 format. If that is the case,
+    # we need to convert the dfwdir (planar averages) to conform to that. To do that however, we need
+    # a reference point. We do not attempt to get such reference point at first, and simply issue the
+    # user a message. After the user specifies the required reference time, we continue the routine.
+    if type(df[dfdatetimevar][0].values) == np.datetime64:
+        if dateref is None:
+            print(f'The array given has time coordinate {dfdatetimevar} of type numpy.datetime64.\n'\
+                  f'While the wdir-containing dataset has scalars. To be able to compare both, we '\
+                  f'need to convert one of them.\nFor that, we use the reference datatime used to '\
+                  f'create the datetime array to make sure both arrays have datetime64 type.')
+            print(f"Call the same function giving the reference in the following format: dateref=pd.to_datetime('2000-01-01 00:00:00')")
+            raise ValueError
+        elif isinstance(dateref, datetime.datetime):
+            # Let's change the dfwdir
+            dfwdir['time'] = pd.to_datetime(dfwdir['time'], unit='s', origin=dateref).round('0.1S')
+        else:
+            raise ValueError (f'dateref given but not of datetime format. Stopping')
+
     if extrapolateHeights:
-        wdir_at_same_coords = dfwdir.interp(datetime=df.datetime, height=heightInterp, kwargs={"fill_value": "extrapolate"})
+        wdir_at_same_coords = dfwdir.interp({dfwdirdatetimevar:df[dfdatetimevar], dfwdirheightvar:heightInterp}, kwargs={"fill_value": "extrapolate"})
     else:
-        wdir_at_same_coords = dfwdir.interp(datetime=df.datetime, height=heightInterp)
+        wdir_at_same_coords = dfwdir.interp({dfwdirdatetimevar:df[datetimevar], dfheightvarheightvar:heightInterp})
      
 
     if showCoriolis:
@@ -384,69 +422,6 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCorio
 
 
 
-def calc_coherence(s1,s2, interval='120min', window_length='10min', window='hamming', normal=None):
-    '''
-    Calculates the correrence between two signals
-    
-    Parameters
-    ==========
-    s1, s2: 
-        DataArray with datetime as coordinate 
-        
-    or,
-    s1, s2: dictionary
-        Dicts with full Dataset and specified coordinates and
-        variable
-        
-    '''
-    from mmctools.helper_functions import calc_spectra
-    
-    if isinstance(s1, dict):
-        if not isinstance(s2,dict):
-            raise ValueError('Both series need to be given in the same format')
-        assert isinstance(s1['var'],str)
-        try:
-            if normal==None:
-                # probe data
-                sig1 = s1['ds'].sel(height=s1['height'], x=s1['x'], y=s1['y'], drop=True, method='nearest', tolerance=1e-3)[s1['var']]
-                sig2 = s2['ds'].sel(height=s2['height'], x=s2['x'], y=s2['y'], drop=True, method='nearest', tolerance=1e-3)[s2['var']]
-            elif normal=='xNormal': 
-                sig1 = s1['ds'].sel(z=s1['z'], y=s1['y'], drop=True, method='nearest', tolerance=1e-3)[s1['var']]
-                sig2 = s2['ds'].sel(z=s2['z'], y=s2['y'], drop=True, method='nearest', tolerance=1e-3)[s2['var']]
-            elif normal=='yNormal': 
-                sig1 = s1['ds'].sel(z=s1['z'], x=s1['x'], drop=True, method='nearest', tolerance=1e-3)[s1['var']]
-                sig2 = s2['ds'].sel(z=s2['z'], x=s2['x'], drop=True, method='nearest', tolerance=1e-3)[s2['var']]
-        except KeyError:
-            print(f'A value given in the dictionary does not appear to exist')
-            raise
-
-            
-    spectraTimes = pd.date_range(start=sig1.datetime[0].values, end=sig1.datetime[-1].values, freq='10min')
-    
-    # Rename signals, following the {u,v,w}{1,2} syntax
-    var1 = s1['var'][0]+'1'
-    var2 = s2['var'][0]+'2'
-    
-    signals = xr.merge([sig1.to_dataset(name=var1), sig2.to_dataset(name=var2)])
-
-    psd = calc_spectra(signals,
-                       var_oi=[var1,var2],
-                       xvar_oi=[(var1,var2)],
-                       spectra_dim='datetime',
-                       tstart=spectraTimes[0], # first time instant of nyserda
-                       #average_dim='station',
-                       #level_dim='height',
-                       window=window,
-                       interval=interval,
-                       window_length=window_length,
-                       window_overlap_pct=0.5)
-
-    gamma2 = psd[var1+var2]**2/(psd[var1]*psd[var2])
-
-    return gamma2.to_dataset(name=var1+var2), psd
-
-
-
 
 
 def addScalebar(ax, size_in_m=5000, label='5 km', loc='lower left', color='black', fontsize=14, hideTicks=True):
@@ -454,7 +429,7 @@ def addScalebar(ax, size_in_m=5000, label='5 km', loc='lower left', color='black
     from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
     import matplotlib.font_manager as fm 
 
-    ax.add_artist(AnchoredSizeBar(ax.transData, size=size_in_m, label=label, loc='lower left', 
+    ax.add_artist(AnchoredSizeBar(ax.transData, size=size_in_m, label=label, loc=loc, 
                   pad=0.3, color=color, frameon=False, size_vertical=2, fontproperties=fm.FontProperties(size=fontsize))
                   )
 
