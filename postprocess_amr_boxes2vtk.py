@@ -3,8 +3,8 @@
 #SBATCH --job-name=pp_vtk
 #SBATCH --output amr2post_vtk.log.%j
 #SBATCH --nodes=1
-#SBATCH --time=2-00
-#SBATCH --account=car
+#SBATCH --time=1:00:00
+#SBATCH --account=shellwind
 #SBATCH --mem=160G
 # #SBATCH --qos=high
 
@@ -13,10 +13,9 @@
 #                                                                         #
 # Post process AMR-Wind output boxes for FAST.Farm and save vtk files for #
 # each group (each individual sampling box). This script should be called #
-# once for each output netcdf file and the group is an optional argument. #
-# If group is not specified, all groups will be saved to vtk. If you need #
-# the boxes faster, consider submitting this script once per group of the #
-# high-resolution box. The output vtk is saved in $case/processedData.    #
+# once for each output netcdf file and each group. If group is not given, #
+# it expects only one (e.g. low box); otherwise, the script will stop and #
+# warn the user. The output vtk is saved in $case/processedData/<group>.  #
 #                                                                         #
 # Usage:                                                                  #
 # postprocess_boxes2vtk.py -p <fullpath> -f <ncfile> [-g <group>]         #
@@ -27,7 +26,7 @@
 #    cd post_processing                                                   #
 #    ls  # see what sampling box files are available.                     #
 #    sbatch postprocess_boxes2vtk.py [-J <jobname>] -p $path              #
-#                                          -f lowres40000.nc              #
+#                                   -f lowres40000.nc -g Low              #
 #    sbatch postprocess_boxes2vtk.py [-J <jobname>] -p $path              #
 #                    -f highres40000.nc -g HighT1_inflow0deg              #
 #                                                                         #
@@ -43,7 +42,7 @@ from itertools import repeat
 from multiprocessing import Pool, freeze_support
 from windtools.amrwind.post_processing  import Sampling
 
-def main(samplingboxfile, pppath, requestedgroup, outpath, dt, itime, ftime, steptime, offsetz):
+def main(samplingboxfile, pppath, requestedgroup, outpath, dt, t0, itime, ftime, steptime, offsetz):
 
     # -------- CONFIGURE RUN
     samplingboxpath = os.path.join(pppath,samplingboxfile)
@@ -68,7 +67,8 @@ def main(samplingboxfile, pppath, requestedgroup, outpath, dt, itime, ftime, ste
     s.getGroupProperties(group=group)
     outpathgroup = os.path.join(outpath, group)
     if not os.path.exists(outpathgroup):
-        os.makedirs(outpathgroup)
+        # Due to potential race condition, adding exist_ok flag as well
+        os.makedirs(outpathgroup, exist_ok=True)
 
     print(f'Group {group} has {s.ndt} saved time steps.')
     if itime==0 and ftime==-1:
@@ -98,6 +98,8 @@ def main(samplingboxfile, pppath, requestedgroup, outpath, dt, itime, ftime, ste
                                   repeat(offsetz),       # offset in z
                                   itime_list,            # itime
                                   ftime_list,            # ftime
+                                  repeat(t0),            # t0
+                                  repeat(dt)             # dt
                                  )
                               )
     print('Finished.')
@@ -116,7 +118,9 @@ if __name__ == '__main__':
     parser.add_argument("--ncfile", "-f", type=str, default=None,
                         help="netcdf sampling planes")
     parser.add_argument("--dt", "-dt",    type=float, default=None,
-                        help="time step for adding datetime to xarray (optional)")
+                        help="time step for naming the boxes output")
+    parser.add_argument("--initialtime", "-t0", default=None,
+                        help="Time step related to first box output (optional)")
     parser.add_argument("--group", "-g",  type=str, default=None,
                         help="group within netcdf file to be read, if more than one is available")
     parser.add_argument("--itime", "-itime",  type=int, default=0,
@@ -134,6 +138,7 @@ if __name__ == '__main__':
     path     = args.path
     ncfile   = args.ncfile
     dt       = args.dt
+    t0       = args.initialtime
     group    = args.group
     itime    = args.itime
     ftime    = args.ftime
@@ -176,6 +181,9 @@ if __name__ == '__main__':
     if dt is not None and  not isinstance(dt,(float,int)):
         raise ValueError(f'dt should be a scalar.')
 
+    if t0 is not None and  not isinstance(t0,(float,int)):
+        raise ValueError(f't0 should be a scalar.')
+
     if steptime < 1:
         raise ValueError(f'The time step increment should be >= 1.')
 
@@ -199,6 +207,6 @@ if __name__ == '__main__':
 
     print(f'Starting job at {time.ctime()}')
     freeze_support()
-    main(ncfile, pppath, group, outpath, dt, itime, ftime, steptime, offsetz)
+    main(ncfile, pppath, group, outpath, dt, t0, itime, ftime, steptime, offsetz)
     print(f'Ending job at   {time.ctime()}')
 

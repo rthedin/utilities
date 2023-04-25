@@ -1,7 +1,7 @@
 #!/home/rthedin/.conda/envs/ssrs_env_scratch/bin/python
 
 #SBATCH --job-name=pp_planes
-#SBATCH --output amr_pp_planes.log.%j
+#SBATCH --output amr2post_planes.log.%j
 #SBATCH --nodes=1
 #SBATCH --time=4:00:00
 #SBATCH --account=car
@@ -51,8 +51,8 @@ def main(samplingplanefile, pppath, outpath, dt, itime, ftime, steptime):
 
     group = s.groups
     if len(group) > 1:
-        raise ValueError(f'The ncfile {samplingplanefile} contains more than one',\
-                         f'group: {groups}. Specify -g <groupstring> for single group.')
+        raise ValueError(f'The ncfile {samplingplanefile} contains more than one'\
+                         f'group: {s.groups}. Specify -g <groupstring> for single group.')
     else:
         group = group[0]
 
@@ -63,7 +63,7 @@ def main(samplingplanefile, pppath, outpath, dt, itime, ftime, steptime):
         chunkedSaving = False
         outputzarr         = os.path.join(outpath, f'{group}.zarr')
         print(f'  Saving all of them.')
-        print(f'  If it seems like you will run out of memory, consider giving itime=0',\
+        print(f'  If it seems like you will run out of memory, consider giving itime=0'\
                 f'and ftime={int(s.ndt/2)} and executing the post processing in chunks.')
     else:
         chunkedSaving = True
@@ -74,7 +74,7 @@ def main(samplingplanefile, pppath, outpath, dt, itime, ftime, steptime):
         raise ValueError(f'The following target zarr file already exists: {outputzarr}')
 
     if ftime > s.ndt:
-        print(f'Final time step requested {ftime} is larger than what is available in',\
+        print(f'Final time step requested {ftime} is larger than what is available in'\
               f'the array, {s.ndt}. Saving up to {s.ndt} instead.')
         ftime = s.ndt
     if ftime == -1:
@@ -225,15 +225,15 @@ if __name__ == '__main__':
 
     if ftime != -1:
         if ftime < itime:
-            raise ValueError(f'The final time step should be larger than the',\
+            raise ValueError(f'The final time step should be larger than the'\
                              f'initial. Received itime={itime} and ftime={ftime}.')
     if itime!=0 or ftime!=-1:
         if ((ftime-itime)/steptime)%8 !=0:
-            raise ValueError(f'Due to the inner workings of zarr and the default',\
-                             f'chunking, the amount of times requested should be a',\
+            raise ValueError(f'Due to the inner workings of zarr and the default'\
+                             f'chunking, the amount of times requested should be a'\
                              f'multiple of 8. Received {int((ftime-itime)/steptime)}')
         if dt is not None:
-            raise ValueError(f'Performing chunked saving. Computing fluctuating',\
+            raise ValueError(f'Performing chunked saving. Computing fluctuating'\
                              f'component is not supported. Skip dt specification.')
 
     # ------------------------------------------------------------------------------

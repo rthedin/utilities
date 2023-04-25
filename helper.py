@@ -390,7 +390,7 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCorio
             raise ValueError
         elif isinstance(dateref, datetime.datetime):
             # Let's change the dfwdir
-            dfwdir['time'] = pd.to_datetime(dfwdir['time'], unit='s', origin=dateref).round('0.1S')
+            dfwdir[dfwdirdatetimevar] = pd.to_datetime(dfwdir[dfwdirdatetimevar], unit='s', origin=dateref).round('0.1S')
         else:
             raise ValueError (f'dateref given but not of datetime format. Stopping')
 
