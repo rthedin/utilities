@@ -21,7 +21,7 @@ generateAnimationFromPNG(){
     elif [ -d animation ]; then
         cd animation
     else
-        echo "The animation directory does not seem to exist on the top level directory of this case."
+        >&2 echo "generateAnimationFromPNG: The animation directory does not seem to exist on the top level directory of this case. Stopping."
         return 1
     fi
 
