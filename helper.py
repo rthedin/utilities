@@ -17,6 +17,7 @@ import xarray as xr
 import os, sys
 import datetime
 from scipy.interpolate import griddata
+import matplotlib.pyplot as plt
 
 #from mmctools.helper_functions import covariance, calc_wind, calc_spectra
 str_var_common = {
@@ -424,17 +425,225 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCorio
 
 
 
-def addScalebar(ax, size_in_m=5000, label='5 km', loc='lower left', color='black', fontsize=14, hideTicks=True):
+def addScalebar(ax, size_in_m=5000, label='5 km', lw=2, loc='lower left', color='black', fontsize=14, hideTicks=True):
 
     from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
     import matplotlib.font_manager as fm 
 
     ax.add_artist(AnchoredSizeBar(ax.transData, size=size_in_m, label=label, loc=loc, 
-                  pad=0.3, color=color, frameon=False, size_vertical=2, fontproperties=fm.FontProperties(size=fontsize))
+                  pad=0.3, color=color, frameon=False, size_vertical=lw, fontproperties=fm.FontProperties(size=fontsize))
                   )
 
     if hideTicks:
         ax.set_xticks([])
         ax.set_yticks([])
+
+
+
+def addLabels(axs,loc='upper right', fontsize=14, alpha=0.6, pad=6):
+    '''
+    Inputs
+    ------
+    pad: int
+        Distance from corner for label. pad=0 is label touching the corner of the plot
+    '''
+    
+    if   loc == 'upper right':  xy=(1,1); xytext=(-pad,-pad); xloc, yloc = 0.97, 0.97;  ha='right'; va='top'
+    elif loc == 'upper left' :  xy=(0,1); xytext=( pad,-pad); xloc, yloc = 0.03, 0.97;  ha='left';  va='top'
+    elif loc == 'lower right':  xy=(1,0); xytext=(-pad, pad); xloc, yloc = 0.97, 0.03;  ha='right'; va='bottom'
+    elif loc == 'lower left' :  xy=(0,0); xytext=( pad, pad); xloc, yloc = 0.03, 0.03;  ha='left';  va='bottom'
+    else:
+        raise ValueError('loc not recognized. Stopping.')
+    
+    if len(axs.flatten())<26:
+        labels = list(map(chr, range(97, 123)))
+    else:
+        # More than a--z, so create 1a, 1b, 1c, 2a, etc. First find the number of numbers number of letters
+        nN = np.shape(axs)[0]
+        nL = np.shape(axs)[1]
+        labels = [str(number) + chr(ord('a') + iletter) for number in range(1, nN + 1) for iletter in range(nL)]
+
+    props = dict(facecolor='white', alpha=alpha, edgecolor='silver', boxstyle='square', pad=0.15)
+    
+    for i, ax in enumerate(axs.flatten()):
+        #ax.text(xloc, yloc, f'$({labels[i]})$', color='black', ha=ha, va=va, transform=ax.transAxes, fontsize=fontsize, bbox=props)
+        ax.annotate(f'$({labels[i]})$', xy=xy, color='black', ha=ha, va=va, xycoords='axes fraction',
+                    xytext=xytext, textcoords='offset points', fontsize=fontsize, bbox=props)
+
+
+
+
+def savePlanesForAnimation(ds, loopvar='datetime', var='u', varunits='m/s',
+                           itime=0, ftime=-1, skiptime=1,
+                           x=None, y=None, z=None,
+                           vmin=None, vmax=None, cmap='viridis',
+                           scalebar=500,
+                           figsize=(14,6),
+                           path=None,
+                           prefix=None,
+                           generateAnimation=False):
+    '''
+    Save planar data in a loop in images in specified directory for animation purposes
+    
+    Inputs
+    ------
+    ds: xr.Dataset
+        Dataset with data to be plotted. It needs to have at least one time coordinate 
+        and at least other two spatial coordinates
+    loopvar: str
+        Variable to loop on. Likely a datetime or time
+    var: str
+        Variable to plot. Potentially 'u', 'v', or 'wspd'
+    varunits: str
+        String for the variable unit to be ploted
+    itime, ftime, skiptime: int or None
+        Starting, end, and skip index of the time array to plot. It is likely that the 
+        dataset has more time instants than it is desired to plot. It may be desirable
+        to have skiptime>10 if your time frequency is 1 s or higher
+    x, y, z: scalar of None
+        If passing a dataset with more than 2 spatial coordinates, then the 3rd should
+        be specified. For example for a dataset with a few horizontal planes, the z of
+        interest should be given. Only one of the three variables should be passed
+    vmin, vmax: scalar or None
+        Min and max of pcolormesh. If one of them is None, then both are considered to
+        be None and will be set depending on the variable asked
+    cmap: str or None
+        Colormap if not viridis for u and RdBu_r for v and w
+    scalebar: str or None
+        If not none, the size in meters of the scale bar to be shown
+    figsize: Tuple
+        Figure size for matplotlib
+    path: str
+        Full path of the animation directory where the png will be saved
+    prefix: str
+        Prefix of the final png files
+    generateAnimation: bool
+        Whether or not to automatically generate the video out of the pngs
+    '''
+    
+    
+    # Perform checks
+    if not isinstance(ds, xr.Dataset):
+        raise ValueError (f'ds should be an xarray dataset')
+    
+    if loopvar not in list(ds.coords):
+        raise ValueError (f'Loop var requested {loopvar} is not in dataset. Available coordinates are: {list(ds.coords)}')
+             
+    if var not in list(ds.data_vars):
+        raise ValueError (f'Variable requested {var} is not in dataset. Available data variables are: {list(ds.coords)}')
+        
+    if not isinstance(varunits, str):
+        raise ValueError (f'Unit of the variable requested {varunits} should be a string')
+        
+    # Fail-safe
+    if itime    is None: itime=0
+    if ftime    is None: ftime=-1
+    if skiptime is None: skiptime=1
+        
+    if itime>len(ds[loopvar]):
+        raise ValueError (f'Starting index {itime} is smaller than length of data series ({len(ds[loopvar])})')
+    
+    if ftime == -1:
+        ftime = len(ds[loopvar])
+    if ftime>len(ds[loopvar]):
+        raise ValueError (f'Ending index {ftime} is larger than length of data series ({len(ds[loopvar])})')
+                                                                                           
+    if sum(arg is not None for arg in [x, y, z]) > 1:
+        raise ValueError (f'At most, only one of x, y, or z can be passed.')
+        
+    if x is not None:
+        dir1='y'; dir2='z'
+        try:
+            ds_ = ds.sel(x=x).squeeze()
+        except KeyError:
+            raise ValueError (f'Value x={x} does not exist in dataset. Valid values are {ds.x.values}')
+    elif y is not None:
+        dir1='x'; dir2='z'
+        try:
+            ds_ = ds.sel(y=y).squeeze()
+        except KeyError:
+            raise ValueError (f'Value y={y} does not exist in dataset. Valid values are {ds.y.values}')
+    elif z is not None:
+        dir1='x'; dir2='y'
+        try:
+            ds_ = ds.sel(z=z).squeeze()
+        except KeyError:
+            raise ValueError (f'Value z={z} does not exist in dataset. Valid values are {ds.z.values}')
+    else:
+        availDirs = [c for c in list(ds.coords) if c in ['x','y','z']]
+        if len(availDirs) != 2:
+            raise ValueError (f'Dataset contains {len(availDirs)} spatial coordinates. Unable to plot planar data. '\
+                               'Consider giving the plane of interest as as {x,y,z}=<scalar>')
+        dir1, dir2 = availDirs
+        ds_ = ds.squeeze()
+         
+    if vmin is None or vmax is None:
+        if var in ['u', 'U', 'wspd', 'windspeed', 'u_', 'streamwise']:
+            vmin=2; vmax=14; cmap = 'viridis'
+        if var in ['v', 'v_', 'crossstream']:
+            vmin=-2; vmax=-2; cmap = 'RdBu_r'
+        if var in ['w']:
+            vmin=-2; vmax=-2; cmap = 'RdBu_r'
+    
+    if os.path.basename(path) == 'animation':
+        if not os.path.isdir(path):
+            # Animation path doesn't exist. Next logic will take care of it
+            path = os.path.split(path)[0]
+    if os.path.basename(path) != 'animation':
+        if not os.path.isdir(path):
+            raise ValueError (f'Path {path} does not exist')
+        path = os.path.join(path, 'animation')
+        if not os.path.isdir(path):
+            print(f'Creating the directory "animation" inside {path} where output will be saved.')
+            os.mkdir(path)
+        
+    if not isinstance(prefix,str):
+        raise ValueError (f'File prefix should be a string')
+    else:
+        if prefix[-1] == '.': prefix=prefix[:-1]
+        prefix = prefix.replace('.','_').replace(' ','_')
+        
+        
+        
+        
+    # Create plot
+    xx, yy = np.meshgrid(ds_[dir1], ds_[dir2], indexing='ij')
+
+    for ifile, idatetime in enumerate(np.arange(itime,ftime,skiptime)):
+        print(f'Saving time index {idatetime} out of {ftime}', end='\r')
+        
+        fig, ax = plt.subplots(1,1,figsize=figsize)
+        
+        datetime=ds_.isel({loopvar:idatetime})[loopvar].values
+        cm = ax.pcolormesh(xx, yy, ds_.sel({loopvar:datetime})[var], vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
+
+        ax.set_aspect('equal')
+        cax = fig.add_axes([ax.get_position().x1+0.01,  ax.get_position().y0, 0.017, ax.get_position().y1-ax.get_position().y0])
+        cbar = fig.colorbar(cm, cax=cax, label=f'{var} [{varunits}]')
+
+        if np.issubdtype(datetime.dtype, np.datetime64):
+            ax.annotate(f'{pd.Timestamp(datetime).hour:02d}:{pd.Timestamp(datetime).minute:02d}:{pd.Timestamp(datetime).second:02d}', xy=(0.5, 0.9), xycoords='axes fraction')
+        else:
+            ax.annotate(f'{datetime}', xy=(0.5, 0.9), xycoords='axes fraction')
+        
+        if isinstance(scalebar, int):
+            addScalebar(ax,size_in_m = scalebar, label=f'{str(scalebar)} m')
+
+        fig.savefig(os.path.join(path,f'{prefix}.{ifile:04d}.png'), transparent=False)
+        plt.cla()
+        plt.close()
+
+    if generateAnimation:
+        import subprocess
+        # https://github.com/rthedin/utilities/blob/master/generateAnimationFromPNG.sh
+        print(f'Done generating the PNG. Creating animation...')
+        currpath = os.getcwd()
+        os.chdir(path)
+        process = subprocess.Popen(["bash", "-c", '. /home/rthedin/utilities/generateAnimationFromPNG.sh; generateAnimationFromPNG'])#, stderr=subprocess.STDOUT, stdout=subprocess.DEVNULL)
+        # Unfortunately, ffmpeg output goes to stderr, not stdout.
+        process.wait()
+        os.chdir(currpath)
+    
+    print(f'Done.                                           ')
 
 
