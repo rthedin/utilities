@@ -173,11 +173,17 @@ def calc_coherence_2signals(s1,s2, strname=None, interval='120min', window_lengt
 
         if s1['z'] != s2['z']:
             raise ValueError(f"Requested lateral separation but points have different z value: {s1['z']} and {s2['z']}")
+
     elif strname == 'lon':
         if s1['y'] != s2['y']:
             raise ValueError(f"Requested longitudinal separation but points have different y value: {s1['y']} and {s2['y']}")
-        if s1['z'] != s2['z']:
-            raise ValueError(f"Requested longitudinal separation but points have different z value: {s1['z']} and {s2['z']}")
+
+        try:  # Maybe z doesn't exist, that is, the ds has been sliced before
+            if s1['z'] != s2['z']:
+                raise ValueError(f"Requested longitudinal separation but points have different z value: {s1['z']} and {s2['z']}")
+        except KeyError:
+            pass
+
     else:
         raise ValueError(f'`strname` needs to be given either as "vert", "lat", or "lon".')
         
@@ -358,6 +364,7 @@ def plotCoherence(coh_sep,
     newAxs = False
     if fig is None and axs is None: 
         fig, axs = plt.subplots(nqoi,3,figsize=(16,nqoi*3), sharey=True, sharex=True, gridspec_kw = {'wspace':0.08, 'hspace':0.08})
+        #fig, axs = plt.subplots(nqoi,3,figsize=(18,nqoi*3), sharey=True, sharex=True, gridspec_kw = {'wspace':0.08, 'hspace':0.15})
         axs = np.atleast_2d(axs) # Make axs 2-D even when len(qoi)==1
         newAxs = True
 
@@ -438,9 +445,9 @@ def plotCoherence(coh_sep,
             axs[row,2].plot(f, co_w, c=currcolor, label=label, **kwargs)
             # Set titles
             if c==0 and newAxs:
-                axs[row,0].text(0.98, 0.97, f'co-coh $\gamma^2_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
-                axs[row,1].text(0.98, 0.97, f'co-coh $\gamma^2_{{vv, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,1].transAxes, fontsize=14)
-                axs[row,2].text(0.98, 0.97, f'co-coh $\gamma^2_{{ww, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,2].transAxes, fontsize=14)
+                axs[row,0].text(0.98, 0.97, f'co-coh $\gamma_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
+                axs[row,1].text(0.98, 0.97, f'co-coh $\gamma_{{vv, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,1].transAxes, fontsize=14)
+                axs[row,2].text(0.98, 0.97, f'co-coh $\gamma_{{ww, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,2].transAxes, fontsize=14)
             row = row+1
         # ---------------------
 
@@ -454,9 +461,9 @@ def plotCoherence(coh_sep,
             axs[row,2].plot(f, qu_w, c=currcolor, label=label, **kwargs)
             # Set titles
             if c==0 and newAxs:
-                axs[row,0].text(0.98, 0.97, f'quad-coh $\\rho^2_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
-                axs[row,1].text(0.98, 0.97, f'quad-coh $\\rho^2_{{vv, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,1].transAxes, fontsize=14)
-                axs[row,2].text(0.98, 0.97, f'quad-coh $\\rho^2_{{ww, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,2].transAxes, fontsize=14)
+                axs[row,0].text(0.98, 0.97, f'quad-coh $\\rho_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
+                axs[row,1].text(0.98, 0.97, f'quad-coh $\\rho_{{vv, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,1].transAxes, fontsize=14)
+                axs[row,2].text(0.98, 0.97, f'quad-coh $\\rho_{{ww, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,2].transAxes, fontsize=14)
             row = row+1
         # ---------------------
 
@@ -500,6 +507,15 @@ def plotCoherence(coh_sep,
     for ax in axs[-1,:]:  ax.set_xlabel(xlabel, fontsize=14)
     for ax in axs[:,0]:   ax.set_ylabel('coherence', fontsize=14)
     #plt.show()
+
+    # for wesc figure
+    #for ax in axs.flatten():
+    #    ax.set_ylim([-0.2, 1])
+    #    ax.set_xlim([0, 0.14])
+    #    ax.set_xticks([0,0.02,0.04,0.06,0.08,0.10,0.12,0.14, 0.15])
+    #    ax.set_xticklabels(['0','0.02','0.04','0.06','0.08','0.10','0.12','0.14',''])
+    #    ax.set_yticks([-0.25,0,0.25, 0.5,0.75,1])
+    #    ax.set_yticklabels(['-0.25','0','0.25', '0.50','0.75','1'])
 
     # Let's show the plot if adding curves to the axis
     if not newAxs and showplot:
