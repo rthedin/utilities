@@ -529,8 +529,15 @@ def savePlanesForAnimation(ds, loopvar='datetime', var='u', varunits='m/s',
     if loopvar not in list(ds.coords):
         raise ValueError (f'Loop var requested {loopvar} is not in dataset. Available coordinates are: {list(ds.coords)}')
              
+    compute_wspd = False
     if var not in list(ds.data_vars):
-        raise ValueError (f'Variable requested {var} is not in dataset. Available data variables are: {list(ds.coords)}')
+        if var == 'wspd':
+            if 'u' not in list(ds.data_vars) or 'v' not in list(ds.data_vars):
+                raise ValueError (f'Asked for wspd, but wspd is not available. Cannot compute it either since "u" and "v" are also not available.')
+            print(f'The variable "wspd" is not in dataset, but will be computed from "u" and "v". Might take longer.')
+            compute_wspd = True
+        else:
+            raise ValueError (f'Variable requested {var} is not in dataset. Available data variables are: {list(ds.data_vars)}')
         
     if not isinstance(varunits, str):
         raise ValueError (f'Unit of the variable requested {varunits} should be a string')
@@ -585,17 +592,18 @@ def savePlanesForAnimation(ds, loopvar='datetime', var='u', varunits='m/s',
         if var in ['w']:
             vmin=-2; vmax=-2; cmap = 'RdBu_r'
     
-    if os.path.basename(path) == 'animation':
-        if not os.path.isdir(path):
-            # Animation path doesn't exist. Next logic will take care of it
-            path = os.path.split(path)[0]
-    if os.path.basename(path) != 'animation':
-        if not os.path.isdir(path):
-            raise ValueError (f'Path {path} does not exist')
-        path = os.path.join(path, 'animation')
-        if not os.path.isdir(path):
-            print(f'Creating the directory "animation" inside {path} where output will be saved.')
-            os.mkdir(path)
+    if path is not None:
+        if os.path.basename(path) == 'animation':
+            if not os.path.isdir(path):
+                # Animation path doesn't exist. Next logic will take care of it
+                path = os.path.split(path)[0]
+        if os.path.basename(path) != 'animation':
+            if not os.path.isdir(path):
+                raise ValueError (f'Path {path} does not exist')
+            path = os.path.join(path, 'animation')
+            if not os.path.isdir(path):
+                print(f'Creating the directory "animation" inside {path} where output will be saved.')
+                os.mkdir(path)
         
     if not isinstance(prefix,str):
         raise ValueError (f'File prefix should be a string')
@@ -611,11 +619,18 @@ def savePlanesForAnimation(ds, loopvar='datetime', var='u', varunits='m/s',
 
     for ifile, idatetime in enumerate(np.arange(itime,ftime,skiptime)):
         print(f'Saving time index {idatetime} out of {ftime}', end='\r')
-        
+
         fig, ax = plt.subplots(1,1,figsize=figsize)
         
         datetime=ds_.isel({loopvar:idatetime})[loopvar].values
-        cm = ax.pcolormesh(xx, yy, ds_.sel({loopvar:datetime})[var], vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
+
+        # Compute wspd if needed
+        if compute_wspd:
+            ds_to_plot = ( ds_.sel({loopvar:datetime})['u']**2 + ds_.sel({loopvar:datetime})['v']**2 )**0.5   
+        else:
+            ds_to_plot = ds_.sel({loopvar:datetime})[var]
+
+        cm = ax.pcolormesh(xx, yy, ds_to_plot, vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
 
         ax.set_aspect('equal')
         cax = fig.add_axes([ax.get_position().x1+0.01,  ax.get_position().y0, 0.017, ax.get_position().y1-ax.get_position().y0])
@@ -629,7 +644,8 @@ def savePlanesForAnimation(ds, loopvar='datetime', var='u', varunits='m/s',
         if isinstance(scalebar, int):
             addScalebar(ax,size_in_m = scalebar, label=f'{str(scalebar)} m')
 
-        fig.savefig(os.path.join(path,f'{prefix}.{ifile:04d}.png'), transparent=False)
+        if path is not None:
+            fig.savefig(os.path.join(path,f'{prefix}.{ifile:04d}.png'), transparent=False)
         plt.cla()
         plt.close()
 
