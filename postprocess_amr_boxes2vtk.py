@@ -64,7 +64,7 @@ def main(samplingboxfile, pppath, requestedgroup, outpath, dt, t0, itime, ftime,
         raise ValueError(f'Requested group {requestedgroup} is not valid. '\
                          f'Value groups: {groups}')
 
-    s.getGroupProperties(group=group)
+    s.getGroupProperties_xr(group=group)
     outpathgroup = os.path.join(outpath, group)
     if not os.path.exists(outpathgroup):
         # Due to potential race condition, adding exist_ok flag as well
