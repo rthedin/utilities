@@ -17,13 +17,14 @@ from itertools import repeat
 from pyFAST.input_output import TurbSimFile, FASTOutputFile, VTKFile, FASTInputFile
 
 
-def readTurbineOutputPar(caseobj, dt_openfast, dt_processing, saveOutput=True,
+def readTurbineOutputPar(caseobj, dt_openfast, dt_processing, saveOutput=True, output='zarr',
                          iCondition=0, fCondition=-1, iCase=0, fCase=-1, iSeed=0, fSeed=-1, iTurbine=0, fTurbine=-1,
                          nCores=36):
     '''
     Inputs
     ------
-    
+    output: str
+        Either 'nc' or 'zarr'. Determines the output format
     Zero-indexed initial and final values for conditions, cases, seeds, and turbines. 
 
 
@@ -62,12 +63,23 @@ def readTurbineOutputPar(caseobj, dt_openfast, dt_processing, saveOutput=True,
         print(f'Changing the number of cores to {fCase-iCase}.')
         nCores = fCase-iCase
 
-    zarrstore = f'ds_turbineOutput_temp_cond{iCondition}_{fCondition}_case{iCase}_{fCase}_seed{iSeed}_{fSeed}_turb{iTurbine}_{fTurbine}_dt{dt_processing}s.zarr'
-    outputzarr = os.path.join(caseobj.path, zarrstore)
+    if output not in ['zarr','nc']:
+        raise ValueError (f'Output can only be zarr or nc')
 
-    if os.path.isdir(outputzarr) and saveOutput:
-       print(f'Output file {zarrstore} exists. Attempting to read it..')
+
+    outfilename = f'ds_turbineOutput_temp_cond{iCondition}_{fCondition}_case{iCase}_{fCase}_seed{iSeed}_{fSeed}_turb{iTurbine}_{fTurbine}_dt{dt_processing}s'
+    zarrstore = f'{outfilename}.zarr'
+    ncfile = f'{outfilename}.nc'
+    outputzarr = os.path.join(caseobj.path, zarrstore)
+    outputnc   = os.path.join(caseobj.path, ncfile)
+
+    if output=='zarr' and os.path.isdir(outputzarr) and saveOutput:
+       print(f'Output file {zarrstore} exists. Loading it..')
        comb_ds = xr.open_zarr(outputzarr)
+       return comb_ds
+    if output=='nc' and os.path.isfile(outputnc) and saveOutput:
+       print(f'Output file {ncfile} exists. Loading it..')
+       comb_ds = xr.open_dataset(outputnc)
        return comb_ds
         
 
@@ -86,6 +98,7 @@ def readTurbineOutputPar(caseobj, dt_openfast, dt_processing, saveOutput=True,
                                            repeat(dt_openfast),      # dt_openfast
                                            repeat(dt_processing),    # dt_processing
                                            repeat(False),       # saveOutput
+                                           repeat(output),      # output
                                            repeat(iCondition),       # iCondition
                                            repeat(fCondition),       # fCondition
                                            iCase_list,               # iCase
@@ -97,19 +110,37 @@ def readTurbineOutputPar(caseobj, dt_openfast, dt_processing, saveOutput=True,
                                           )
                                        )
 
+    # Trying this out
+    print('trying to close the pool. does this seem to work better on notebooks?')
+    p.close()
+    p.terminate()
+    p.join()
+
     print(f'Done reading all output. Concatenating the arrays')
-    comb_ds = xr.combine_by_coords(ds_)
+  
+    try:
+        comb_ds = xr.combine_by_coords(ds_)
+    except ValueError as e:
+        if str(e) == "Coordinate variable case is neither monotonically increasing nor monotonically decreasing on all datasets":
+            print('Concatenation using combine_by_coords failed. Concatenating using merge instead.')
+            print('  WARNING: Indexes are _not_ monotonically increasing. Do not use `isel`.')
+            print('           Try using `.sortby(<dimstr>)` to sort it.')
+            comb_ds = xr.merge(ds_)
+        else:
+            raise
+
 
     if saveOutput:
-        pass
-        print('Done concatenating. Saving zarr file.')
-        comb_ds.to_zarr(outputzarr)
+        print('Done concatenating. Saving {output} file.')
+        if output == 'zarr':  comb_ds.to_zarr(outputzarr)
+        elif output == 'nc':  comb_ds.to_netcdf(outputnc)
+
 
     print('Finished.')
 
     return comb_ds
 
-def readTurbineOutput(caseobj, dt_openfast, dt_processing=1, saveOutput=True, 
+def readTurbineOutput(caseobj, dt_openfast, dt_processing=1, saveOutput=True, output='zarr',
                       iCondition=0, fCondition=-1, iCase=0, fCase=-1, iSeed=0, fSeed=-1, iTurbine=0, fTurbine=-1):
     '''
     caseobj: FASTFarmCaseSetup object
@@ -120,6 +151,8 @@ def readTurbineOutput(caseobj, dt_openfast, dt_processing=1, saveOutput=True,
         Time step to which the processing will be saved. Default=1
     saveOutput: bool
         Whether or not to save the output to a zarr file
+    output: str
+        Format to save output. Only 'zarr' and 'nc' available
     '''
     
     if fCondition==-1:
@@ -151,14 +184,19 @@ def readTurbineOutput(caseobj, dt_openfast, dt_processing=1, saveOutput=True,
         raise ValueError (f'Final turbine to read needs to be larger than initial.')
 
 
-    zarrstore = f'ds_turbineOutput_temp_cond{iCondition}_{fCondition}_case{iCase}_{fCase}_seed{iSeed}_{fSeed}_turb{iTurbine}_{fTurbine}_dt{dt_processing}s.zarr'
-    outputzarr = os.path.join(caseobj.path,zarrstore)
-    
+    outfilename = f'ds_turbineOutput_temp_cond{iCondition}_{fCondition}_case{iCase}_{fCase}_seed{iSeed}_{fSeed}_turb{iTurbine}_{fTurbine}_dt{dt_processing}s'
+    zarrstore = f'{outfilename}.zarr'
+    ncfile = f'{outfilename}.nc'
+    outputzarr = os.path.join(caseobj.path, zarrstore)
+    outputnc   = os.path.join(caseobj.path, ncfile)
+
     # Read or process turbine output
-    if os.path.isdir(outputzarr):
+    if os.path.isdir(outputzarr) or os.path.isfile(outputnc):
         # Data already processed. Reading output
-        turbs = xr.open_zarr(outputzarr) 
+        if output == 'zarr':  turbs = xr.open_zarr(outputzarr) 
+        elif output == 'nc':  turbs = xr.open_dataset(outputnc)
     else: 
+        print(f'{outfilename}.{output} does not exist. Reading output data...')
         # Processed data not saved. Reading it
         dt_ratio = int(dt_processing/dt_openfast)
 
@@ -195,9 +233,10 @@ def readTurbineOutput(caseobj, dt_openfast, dt_processing=1, saveOutput=True,
         turbs = turbs_cond.rename_vars(renameDict)
 
         if saveOutput:
-            print(f'Saving output {zarrstore}...')
-            turbs.to_zarr(outputzarr)
-            print(f'Saving output {zarrstore}... Done.')
+            print('Saving output {outfilename}.{output}...')
+            if output == 'zarr':  turbs.to_zarr(outputzarr)
+            elif output == 'nc':  turbs.to_netcdf(outputnc)
+            print('Saving output {outfilename}.{output}... Done.')
     
     return turbs
 
@@ -206,7 +245,7 @@ def readTurbineOutput(caseobj, dt_openfast, dt_processing=1, saveOutput=True,
 
 
 
-def readFFPlanesPar(caseobj, sliceToRead, verbose=False, saveOutput=True, iCondition=0, fCondition=-1, iCase=0, fCase=-1, iSeed=0, fSeed=-1, nCores=36):
+def readFFPlanesPar(caseobj, sliceToRead, verbose=False, saveOutput=True, iCondition=0, fCondition=-1, iCase=0, fCase=-1, iSeed=0, fSeed=-1, itime=0, ftime=-1, skiptime=1, nCores=36):
 
     if fCondition==-1:
         fCondition = caseobj.nConditions
@@ -223,10 +262,6 @@ def readFFPlanesPar(caseobj, sliceToRead, verbose=False, saveOutput=True, iCondi
     if fSeed-iSeed <= 0:
         raise ValueError (f'Final seed to read needs to be larger than initial.')
 
-    if fCase-iCase < nCores:
-        print(f'Total number of cases requested ({fCase-iCase}) is lower than number of cores {nCores}.')
-        print(f'Changing the number of cores to {fCase-iCase}.')
-        nCores = fCase-iCase
 
     zarrstore = f'ds_{sliceToRead}Slices_temp_cond{iCondition}_{fCondition}_case{iCase}_{fCase}_seed{iSeed}_{fSeed}.zarr'
     outputzarr = os.path.join(caseobj.path, zarrstore)
@@ -235,29 +270,75 @@ def readFFPlanesPar(caseobj, sliceToRead, verbose=False, saveOutput=True, iCondi
        print(f'Output file {zarrstore} exists. Attempting to read it..')
        comb_ds = xr.open_zarr(outputzarr)
        return comb_ds
-        
+
+
+    # We will loop in the variable that we have more entries. E.g. if we have several condition, and only one case,
+    # then we will loop on the conditions. Analogous, if we have single conditions with many cases, we will loop on
+    # cases. Here we figure out where the loop will take place and set the appropriate number of cores to be used.
+    if fCondition-iCondition > fCase-iCase:
+        loopOn = 'cond'
+        print(f'Looping on conditions.')
+        if fCondition-iCondition < nCores:
+            print(f'Total number of condtions requested ({fCondition-iCondition}) is lower than number of cores {nCores}.')
+            print(f'Changing the number of cores to {fCondition-iCondition}.')
+            nCores = fCondition-iCondition
+    else:
+        loopOn = 'case'
+        print(f'Looping on cases.')
+        if fCase-iCase < nCores:
+            print(f'Total number of cases requested ({fCase-iCase}) is lower than number of cores {nCores}.')
+            print(f'Changing the number of cores to {fCase-iCase}.')
+            nCores = fCase-iCase
+
 
     print(f'Running readFFPlanes in parallel using {nCores} workers')
 
-    # Split all the cases in arrays of roughly the same size
-    chunks =  np.array_split(range(iCase,fCase), nCores)
-    # Now, get the beginning and end of each separate chunk
-    iCase_list = [i[0]    for i in chunks]
-    fCase_list = [i[-1]+1 for i in chunks] 
-    print(f'iCase_list is {iCase_list}')
-    print(f'fCase_list is {fCase_list}')
+    if loopOn == 'cond':
+
+        # Split all the cases in arrays of roughly the same size
+        chunks =  np.array_split(range(iCondition,fCondition), nCores)
+        # Now, get the beginning and end of each separate chunk
+        iCond_list = [i[0]    for i in chunks]
+        fCond_list = [i[-1]+1 for i in chunks] 
+        print(f'iCond_list is {iCond_list}')
+        print(f'fCond_list is {fCond_list}')
+
+        # For generality, we create the list of cases as a repeat
+        iCase_list = repeat(iCase)
+        fCase_list = repeat(fCase)
+
+    elif loopOn == 'case':
+
+        # Split all the cases in arrays of roughly the same size
+        chunks =  np.array_split(range(iCase,fCase), nCores)
+        # Now, get the beginning and end of each separate chunk
+        iCase_list = [i[0]    for i in chunks]
+        fCase_list = [i[-1]+1 for i in chunks] 
+        print(f'iCase_list is {iCase_list}')
+        print(f'fCase_list is {fCase_list}')
+
+        # For generality, we create the list of cond as a repeat
+        iCond_list = repeat(iCondition)
+        fCond_list = repeat(fCondition)
+
+    else:
+        raise ValueError (f"This shouldn't occur. Not sure what went wrong.")
+
 
     p = Pool()
     ds_ = p.starmap(readFFPlanes, zip(repeat(caseobj),          # caseobj
                                       repeat(sliceToRead),      # slicesToRead
-                                      repeat(verbose),            # verbose
+                                      repeat(verbose),          # verbose
                                       repeat(False),            # saveOutput
-                                      repeat(iCondition),       # iCondition
-                                      repeat(fCondition),       # fCondition
+                                      iCond_list,               # iCondition
+                                      fCond_list,               # fCondition
                                       iCase_list,               # iCase
                                       fCase_list,               # fCase
                                       repeat(iSeed),            # iSeed
                                       repeat(fSeed),            # fSeed
+                                      repeat(itime),            # itime
+                                      repeat(ftime),            # ftime
+                                      repeat(skiptime)          # skiptime
                                      )
                                   )
 
@@ -281,9 +362,20 @@ def readFFPlanesPar(caseobj, sliceToRead, verbose=False, saveOutput=True, iCondi
 
 
 
-def readFFPlanes(caseobj, slicesToRead=['x','y','z'], verbose=False, saveOutput=True, iCondition=0, fCondition=-1, iCase=0, fCase=-1, iSeed=0, fSeed=-1):
+def readFFPlanes(caseobj, slicesToRead=['x','y','z'], verbose=False, saveOutput=True, iCondition=0, fCondition=-1, iCase=0, fCase=-1, iSeed=0, fSeed=-1, itime=0, ftime=-1, skiptime=1):
     '''
     Read and process FAST.Farm planes into xarrays.
+
+    INPUTS
+    ======
+    i<quant>, f<quant>: int
+        Initial and end index of <quant> to read
+    itime: int
+        Initial timestep to open and read
+    ftime: int
+        Final timestep to open and read
+    skiptime: int
+        Read at every skiptime timestep. Used when data is too fine and not needed.
 
     '''
 
@@ -308,6 +400,8 @@ def readFFPlanes(caseobj, slicesToRead=['x','y','z'], verbose=False, saveOutput=
     if fSeed-iSeed <= 0:
         raise ValueError (f'Final seed to read needs to be larger than initial.')
 
+    if skiptime<1:
+        raise ValueError (f'Skiptime should be 1 or greater. If 1, no slices will be skipped.')
 
     print(f'Requesting to save {slicesToRead} slices')
 
@@ -359,7 +453,6 @@ def readFFPlanes(caseobj, slicesToRead=['x','y','z'], verbose=False, saveOutput=
                 for case in np.arange(iCase, fCase, 1):
                     Slices_seed = []
                     for seed in np.arange(iSeed, fSeed, 1):
-                        print(f'Processing {slices} slice: Condition {cond}, Case {case}, Seed {seed}')
                         seedPath = os.path.join(caseobj.path, caseobj.condDirList[cond], caseobj.caseDirList[case], f'Seed_{seed}')
 
                         # Read FAST.Farm input to determine outputs
@@ -377,15 +470,29 @@ def readFFPlanes(caseobj, slicesToRead=['x','y','z'], verbose=False, saveOutput=
                         nOutputTimes = int(np.floor(tmax/WrDisDT))
 
                         # Determine number of output digits for reading
-                        ndigits = len(str(max(NOutDisWindXY,NOutDisWindXZ,NOutDisWindYZ)))
+                        ndigitsplane = len(str(max(NOutDisWindXY,NOutDisWindXZ,NOutDisWindYZ)))
+                        ndigitstime = len(str(nOutputTimes)) + 1  # this +1 is experimental. I had 1800 planes and got 5 digits.
+                        # If this breaks again and I need to come here to fix, I need to ask Andy how the amount of digits is determined.
+
+
+                        # Determine how many snapshots to read depending on input
+                        if ftime==-1:
+                            ftime=nOutputTimes
+                        elif ftime>nOutputTimes:
+                            raise ValueError (f'Final time step requested ({ftime}) is greater than the total available ({nOutputTimes})')
+
+
+                        # Print info
+                        print(f'Processing {slices} slice: Condition {cond}, Case {case}, Seed {seed}, snapshot {itime} to {ftime} ({nOutputTimes} available)')
 
                         if slices == 'z':
                             # Read Low-res z-planes
                             Slices=[]
                             for zplane in range(NOutDisWindXY):
                                 Slices_t=[]
-                                for t in range(nOutputTimes):
-                                    file = f'FFarm_mod.Low.DisXY{zplane+1:0{ndigits}d}.{t:05d}.vtk'
+                                #for t in range(nOutputTimes):
+                                for t in np.arange(itime,ftime,skiptime):
+                                    file = f'FFarm_mod.Low.DisXY{zplane+1:0{ndigitsplane}d}.{t:0{ndigitstime}d}.vtk'
                                     if verbose: print(f'Reading z plane {zplane} for time step {t}: \t {file}')
 
                                     vtk = VTKFile(os.path.join(seedPath, 'vtk_ff', file))
@@ -401,8 +508,9 @@ def readFFPlanes(caseobj, slicesToRead=['x','y','z'], verbose=False, saveOutput=
                             Slices=[]
                             for yplane in range(NOutDisWindXZ):
                                 Slices_t=[]
-                                for t in range(nOutputTimes):
-                                    file = f'FFarm_mod.Low.DisXZ{yplane+1:0{ndigits}d}.{t:05d}.vtk'
+                                #for t in range(nOutputTimes):
+                                for t in np.arange(itime,ftime,skiptime):
+                                    file = f'FFarm_mod.Low.DisXZ{yplane+1:0{ndigitsplane}d}.{t:0{ndigitstime}d}.vtk'
                                     if verbose: print(f'Reading y plane {yplane} for time step {t}: \t {file}')
 
                                     vtk = VTKFile(os.path.join(seedPath, 'vtk_ff', file))
@@ -419,8 +527,9 @@ def readFFPlanes(caseobj, slicesToRead=['x','y','z'], verbose=False, saveOutput=
                             for xplane in range(NOutDisWindYZ):
                                 Slices_t=[]
                                 print(f'Processing {slices} slice: Condition {cond}, Case {case}, Seed {seed}, x plane {xplane}')
-                                for t in range(nOutputTimes):
-                                    file = f'FFarm_mod.Low.DisYZ{xplane+1:0{ndigits}d}.{t:05d}.vtk'
+                                #for t in range(nOutputTimes):
+                                for t in np.arange(itime,ftime,skiptime):
+                                    file = f'FFarm_mod.Low.DisYZ{xplane+1:0{ndigitsplane}d}.{t:0{ndigitstime}d}.vtk'
                                     if verbose: print(f'Reading x plane {xplane} for time step {t}: \t {file}')
 
                                     vtk = VTKFile(os.path.join(seedPath, 'vtk_ff', file))
