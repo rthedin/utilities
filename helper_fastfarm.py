@@ -593,3 +593,62 @@ def readAndCreateDataset(vtk, caseobj, cond=None, case=None, seed=None, t=None, 
     return ds        
 
 
+def readVTK_structuredPoints (vtkpath):
+    '''
+    Function to read the VTK written by utilities/postprocess_amr_boxes2vtk.py
+    Input
+    -----
+    vtkpath: str
+        Full path of the vtk, including its extension
+    '''
+
+    import vtk
+
+    reader = vtk.vtkStructuredPointsReader()
+    reader.SetFileName(vtkpath)
+    reader.Update()
+
+    output = reader.GetOutput()
+
+    dims = output.GetDimensions()
+    spacing = output.GetSpacing()
+    origin = output.GetOrigin()
+    nx, ny, nz = dims
+
+    data_type = output.GetScalarTypeAsString()
+    point_data = output.GetPointData()
+    vector_array = point_data.GetArray(0)
+    num_components = vector_array.GetNumberOfComponents()
+
+
+    # Convert vector array to a NumPy array
+    vector_data = np.zeros((nx, ny, nz, num_components), dtype=np.float32)
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz):
+                index = i + nx * (j + ny * k)
+                vector = vector_array.GetTuple(index)
+                vector_data[i, j, k, :] = vector
+
+    # Create coordinates along x, y, and z dimensions
+    x_coords = origin[0] + spacing[0] * np.arange(nx)
+    y_coords = origin[1] + spacing[1] * np.arange(ny)
+    z_coords = origin[2] + spacing[2] * np.arange(nz)
+
+    # Create the xarray dataset
+    ds = xr.Dataset(data_vars = {
+                      'u': (['x', 'y', 'z'], vector_data[:,:,:,0]),
+                      'v': (['x', 'y', 'z'], vector_data[:,:,:,1]),
+                      'w': (['x', 'y', 'z'], vector_data[:,:,:,2]),
+                    }, 
+                    coords = {
+                      'x': x_coords,
+                      'y': y_coords,
+                      'z': z_coords,
+                      }
+                  )
+
+    return ds
+
+
+
