@@ -484,6 +484,7 @@ def savePlanesForAnimation(ds, loopvar='datetime', var='u', varunits='m/s',
                            figsize=(14,6),
                            path=None,
                            prefix=None,
+                           fontsize=14,
                            generateAnimation=False):
     '''
     Save planar data in a loop in images in specified directory for animation purposes
@@ -637,18 +638,20 @@ def savePlanesForAnimation(ds, loopvar='datetime', var='u', varunits='m/s',
 
         ax.set_aspect('equal')
         cax = fig.add_axes([ax.get_position().x1+0.01,  ax.get_position().y0, 0.017, ax.get_position().y1-ax.get_position().y0])
-        cbar = fig.colorbar(cm, cax=cax, label=f'{var} [{varunits}]')
+        cbar = fig.colorbar(cm, cax=cax)
+        cbar.set_label(f'{var} [{varunits}]', fontsize=fontsize)
+        cbar.ax.tick_params(labelsize=fontsize)
 
         if np.issubdtype(datetime.dtype, np.datetime64):
-            ax.annotate(f'{pd.Timestamp(datetime).hour:02d}:{pd.Timestamp(datetime).minute:02d}:{pd.Timestamp(datetime).second:02d}', xy=(0.5, 0.9), xycoords='axes fraction')
+            ax.annotate(f'{pd.Timestamp(datetime).hour:02d}:{pd.Timestamp(datetime).minute:02d}:{pd.Timestamp(datetime).second:02d}', xy=(0.5, 0.9), xycoords='axes fraction', fontsize=fontsize)
         else:
-            ax.annotate(f'{datetime}', xy=(0.5, 0.9), xycoords='axes fraction')
+            ax.annotate(f'{datetime}', xy=(0.5, 0.9), xycoords='axes fraction', fontsize=fontsize)
         
         if isinstance(scalebar, int):
-            addScalebar(ax,size_in_m = scalebar, label=f'{str(scalebar)} m')
+            addScalebar(ax,size_in_m = scalebar, label=f'{str(scalebar)} m', fontsize=fontsize)
 
         if path is not None:
-            fig.savefig(os.path.join(path,f'{prefix}.{ifile:04d}.png'), transparent=False)
+            fig.savefig(os.path.join(path,f'{prefix}.{ifile:04d}.png'), facecolor='white', transparent=False, bbox_inches='tight')
         plt.cla()
         plt.close()
 
