@@ -370,12 +370,15 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCorio
         heightInterp = np.repeat(refheight, len(heightInterp))
 
     # Get name of the datetime and height variables
-    if 'datetime' in list(df.variables.keys()):     dfdatetimevar = 'datetime'
-    if 'time'     in list(df.variables.keys()):     dfdatetimevar = 'time'
-    if 'datetime' in list(dfwdir.variables.keys()): dfwdirdatetimevar = 'datetime'
-    if 'time'     in list(dfwdir.variables.keys()): dfwdirdatetimevar = 'time'
-    if 'height'   in list(dfwdir.variables.keys()): dfwdirheightvar = 'height'
-    if 'z'        in list(dfwdir.variables.keys()): dfwdirheightvar = 'z'
+    if   'datetime' in list(df.variables.keys()):     dfdatetimevar = 'datetime'
+    elif 'time'     in list(df.variables.keys()):     dfdatetimevar = 'time'
+    else: raise ValueError (f'Could not find a date-related variable in target dataset')
+    if   'datetime' in list(dfwdir.variables.keys()): dfwdirdatetimevar = 'datetime'
+    elif 'time'     in list(dfwdir.variables.keys()): dfwdirdatetimevar = 'time'
+    else: raise ValueError (f'Could not find a date-related variable in wdir-containing dataset')
+    if   'height'   in list(dfwdir.variables.keys()): dfwdirheightvar = 'height'
+    elif 'z'        in list(dfwdir.variables.keys()): dfwdirheightvar = 'z'
+    else: raise ValueError (f'Could not find a height-related variable in wdir-containing dataset')
 
     # The df dataset can have its time/datetime coordinates in datetime64 format. If that is the case,
     # we need to convert the dfwdir (planar averages) to conform to that. To do that however, we need
