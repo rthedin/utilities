@@ -28,7 +28,7 @@ copyCaseInstantZero(){
     
     nCores=$(find $1 -maxdepth 1 -type d -name 'processor*' | wc -l)
     
-    for (( c=0; c<nCores; c++ )); do
+    for (( c=0; c<$nCores; c++ )); do
         mkdir processor$c
         cp -r $1/processor$c/constant processor$c/
         echo -ne "Copying processor$c       \r"

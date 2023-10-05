@@ -1,3 +1,4 @@
+from __future__ import print_function
 # script written by Regis Thedin
 
 import os
@@ -115,7 +116,7 @@ if t0 == 999:
     try:
         fullpath = os.path.realpath(os.path.abspath(files1[0]))
     except IndexError:
-        print('Error: You might be requesting slices that are not available.\n\n')
+        print('Error: You might be requesting slices that are not available, or foamSequenceVTKFiles has not been executed.\n\n')
     t0 = int(os.path.basename(os.path.dirname(fullpath)))
 
 # set scale of the time label (one slice represents 100s, 500s, etc). Assumes uniform sampling
@@ -132,24 +133,25 @@ if not os.path.exists('{case}/animation'.format(case=case)):
 anim_outpath = '{case}/animation/{stype}_{h}m_{var}_{comp}.png'.format(case=case, stype=slicetype, h=str(normal).replace('-','m'), var=var, comp=comp)
 
 # Print information
-print '---------------- CASE PARAMETERS ----------------'
-print '- case:', case
-print '- variable:', var
-print '- component:', comp
-print '- slice type:',slicetype
-print '- normal:', normal
-print '- time shift:', t0
-print '- time scale:', timescale
-print '- scale upper bound:', scaleupperbound
-print '- scale lower bound:', scalelowerbound
-print '- first frame:', anim_fstart
-print '- last frame:', anim_fend
-print ' '
+print('---------------- CASE PARAMETERS ----------------')
+print('- case:', case)
+print('- variable:', var)
+print('- component:', comp)
+print('- slice type:',slicetype)
+print('- normal:', normal)
+print('- time shift:', t0)
+print('- time scale:', timescale)
+print('- scale upper bound:', scaleupperbound)
+print('- scale lower bound:', scalelowerbound)
+print('- first frame:', anim_fstart)
+print('- last frame:', anim_fend)
+print(' ')
 
-print 'Reading {var}_{stype}.{normal}.{{{i}..{f}}}.vtk'.format(var=var, stype=slicetype, normal=str(normal).replace('-','m'), i=anim_fstart, f=anim_fend)
-print 'Number of available VTKs:', len(files1)
-print 'Animation will be saved as', anim_outpath
-print ' '
+#print(f"Reading {var}_{slicetype}.{str(normal).replace('-','m')}.{anim_fstart}..{anim_fend}.vtk")
+print('Reading {var}_{stype}.{normal}.{{{i}..{f}}}.vtk'.format(var=var, stype=slicetype, normal=str(normal).replace('-','m'), i=anim_fstart, f=anim_fend))
+print('Number of available VTKs:', len(files1))
+print('Animation will be saved as', anim_outpath)
+print(' ')
 
 # ------------------------------------------------------------------------------
 # --------------------------------- FIRST PANEL --------------------------------
@@ -296,6 +298,7 @@ text1Display.WindowLocation = 'UpperCenter'
 # --------------------------------------------------------- VIEW PROPERTIES
 # Properties modified on renderView1
 renderView1.EnableOSPRay = 1
+#renderView1.EnableRayTracing = 1
 renderView1.Shadows = 0
 renderView1.CameraParallelProjection = 1
 renderView1.ProgressivePasses = 2  # needs --enable-streaming-options

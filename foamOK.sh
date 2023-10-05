@@ -33,10 +33,14 @@ foamOK(){
     check 'Refined' log.*refineHexMesh*
     check 'End' log.*refineHexMesh*
     check 'Mesh OK' log.*checkMesh*
+    check '^    cells' log.*checkMesh*
     check 'End' log.*changeDictionary*
     check 'Max number of cells' log.*decomposePar*
     check 'End' log.*decomposePar*
     check 'Finalising' log.*moveDynamicMesh*
     check 'Finalising' log.*setFieldsABL*
+    check 'End'        log.*.reconstructParMesh*
+    check 'End'        log.*.reconstructPar
     check 'Finalising' log.*superDeliciousVanilla*
+    check 'Ending'     log.*superDeliciousVanilla*
 }

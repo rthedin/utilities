@@ -60,7 +60,11 @@ if answer != 'y':
 
 # Obtain list of times dirs in str and float
 timesStr = os.listdir(path)
-timesFlo = [float(t) for t in timesStr]  # clipped at precision 12
+try:
+    timesFlo = [float(t) for t in timesStr]  # clipped at precision 12
+except ValueError:
+    print('ERROR: Maybe you have a file/directory that is a string?')
+    sys.exit()
 
 # Reorder them
 timesFloSort = np.sort(timesFlo)

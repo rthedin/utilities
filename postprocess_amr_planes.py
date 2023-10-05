@@ -56,7 +56,7 @@ def main(samplingplanefile, pppath, outpath, dt, itime, ftime, steptime):
     else:
         group = group[0]
 
-    s.getGroupProperties(group=group)
+    s.getGroupProperties_xr(group=group)
 
     print(f'Group {group} has {s.ndt} saved time steps.')
     if itime==0 and ftime==-1:

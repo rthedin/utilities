@@ -16,8 +16,11 @@ redgreen = np.vstack((reds(np.linspace(0, 1, 128)), greens(np.linspace(0, 1, 128
 RdGr   = mcolors.ListedColormap(redgreen, name='RdGr')
 RdGr_r = RdGr.reversed(name='RdGr_r')
 # Register colormaps
-matplotlib.colormaps.register(cmap=RdGr)
-matplotlib.colormaps.register(cmap=RdGr_r)
+try:
+    matplotlib.colormaps.register(cmap=RdGr)
+    matplotlib.colormaps.register(cmap=RdGr_r)
+except:
+    pass
 
 
 # Create a sequential colormap with every CSS4 color, named <color>s.

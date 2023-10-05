@@ -85,6 +85,15 @@ def main(samplingboxfile, pppath, requestedgroup, outpath, dt, t0, itime, ftime,
 
     # Split all the time steps in arrays of roughly the same size
     chunks =  np.array_split(range(itime,ftime), 36)
+    # The lists itime_list and ftime_list below will fail if ftime-itime is less than 36, since a
+    # non-homogeneous numpy array will be created. If that is the case, let's issue a warning and 
+    # end the program here.
+    if ftime-itime < 36:
+        raise ValueError(f'The number of boxes is lower than the number of cores. Stopping. A fix '\
+                         f'for this error is to provide a new value for the number of nodes in the '\
+                         f'2_saveVTK script. For example, for the low box, selection of nNodes_low '\
+                         f'needs to be such that (ftime_low-itime_low)/nNodes_low is larger than 36.')
+
     # Now, get the beginning and end of each separate chunk
     itime_list = [i[0]    for i in chunks]
     ftime_list = [i[-1]+1 for i in chunks] 

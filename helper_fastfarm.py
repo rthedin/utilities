@@ -131,7 +131,7 @@ def readTurbineOutputPar(caseobj, dt_openfast, dt_processing, saveOutput=True, o
 
 
     if saveOutput:
-        print('Done concatenating. Saving {output} file.')
+        print(f'Done concatenating. Saving {output} file.')
         if output == 'zarr':  comb_ds.to_zarr(outputzarr)
         elif output == 'nc':  comb_ds.to_netcdf(outputnc)
 
@@ -233,10 +233,10 @@ def readTurbineOutput(caseobj, dt_openfast, dt_processing=1, saveOutput=True, ou
         turbs = turbs_cond.rename_vars(renameDict)
 
         if saveOutput:
-            print('Saving output {outfilename}.{output}...')
+            print(f'Saving output {outfilename}.{output}...')
             if output == 'zarr':  turbs.to_zarr(outputzarr)
             elif output == 'nc':  turbs.to_netcdf(outputnc)
-            print('Saving output {outfilename}.{output}... Done.')
+            print(f'Saving output {outfilename}.{output}... Done.')
     
     return turbs
 
