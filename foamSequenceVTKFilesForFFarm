@@ -1,43 +1,25 @@
 #!/bin/sh
-#------------------------------------------------------------------------------
-# =========                 |
-# \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
-#  \\    /   O peration     | Website:  https://openfoam.org
-#   \\  /    A nd           | Copyright (C) 2015-2018 OpenFOAM Foundation
-#    \\/     M anipulation  |
-#------------------------------------------------------------------------------
-# License
-#     This file is part of OpenFOAM.
+
+#---------------------------------------------------------------------------- #
+# foamSequenceVTKFilesForFFarm
 #
-#     OpenFOAM is free software: you can redistribute it and/or modify it
-#     under the terms of the GNU General Public License as published by
-#     the Free Software Foundation, either version 3 of the License, or
-#     (at your option) any later version.
-#
-#     OpenFOAM is distributed in the hope that it will be useful, but WITHOUT
-#     ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-#     FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
-#     for more details.
-#
-#     You should have received a copy of the GNU General Public License
-#     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
-#
-# Script
-#     foamSequenceVTKFilesForFFarm
-#
-# Description
-#     Creates symbolic links to all VTK files in a post-processing directory
-#     Links form a sequence like name.0000.vtk, name.0001.vtk, etc.
-#     Paraview recognises link names as a sequence which can be animated.
-#     The sequence of links can be used to create a video from the images.
-#     - Default directory name for VTK files is postProcessing
+#     This script is based on OpenFOAM's original foamSequenceVTKFiles
+#     If not additional paramters are passed, this function acts exactly
+#     like the original from OpenFOAM 6.
 #
 #     Function modified by Regis Thedin on Aug 2022 to handle FAST.Farm
 #     ambient wind files. The modifications include the option to copy,
 #     rather than link, the output files; as well as the renaming structure.
 #     Note that the renaming can still be changed through some input variables
+#     Creates symbolic links to all VTK files in a post-processing directory
 #
-#------------------------------------------------------------------------------
+#     Original description:
+#     Links form a sequence like name.0000.vtk, name.0001.vtk, etc.
+#     Paraview recognises link names as a sequence which can be animated.
+#     The sequence of links can be used to create a video from the images.
+#     - Default directory name for VTK files is postProcessing
+#
+#---------------------------------------------------------------------------- #
 error() {
     exec 1>&2
     while [ "$#" -ge 1 ]; do echo "$1"; shift; done
@@ -50,23 +32,36 @@ usage() {
 
 Usage: ${0##*/} [OPTIONS] ...
 options:
-  -case   | -c <dir>    specify case directory (default = local dir)
-  -dir    | -d <dir>    post-processing directory <dir> (default = postProcessing)
-  -help   | -h          print the usage
-  -out    | -o <dir>    output links directory <dir> (default = sequencedVTK)
-  -format | -f <str>    format option of output files
-  -mode   | -m <str>    mode of operation, ln or cp (default=ln)
-  -lzero  | -lz <bool>  numbered output files contain leading zeros (default=true)
+  -case    | -c <dir>      specify case directory (default = local dir)
+  -dir     | -d <dir>      post-processing directory <dir> (default = postProcessing)
+  -help    | -h            print the usage
+  -out     | -o <dir>      output links directory <dir> (default = sequencedVTK)
+  -format  | -f <str>      format option of output files
+  -mode    | -m <str>      mode of operation, ln or cp (default=ln)
+  -lzero   | -lz <bool>    numbered output files contain leading zeros (default=true)
+  -zeroind | -zind <bool>  start numbering at zero (default=false)
+  -apath   | -ap <bool>    if `-mode ln`, use absolute path or not (default=false)
+  -fsuffix | -fs <str>     suffix of the vtk files if there are multiple (default=vtk)
 
-Creates symbolic links to all VTK files in a post-processing directory
+Creates symbolic links to selected VTK files in a post-processing directory
 Links form a sequence like name.0000.vtk, name.0001.vtk, etc.
+
 The format can be changed to Amb.t0000.vtk, for example, by using the -f flag.
+
+Selected VTK output with certain preffix can be changed using the -fsuffix
+flag, e.g., if you have Low_U.vtk, Low_U_adj.vtk, and Low_U_adj_coords.vtk in 
+all time directories, you can call this function giving -fs _adj.vtk
+
 Paraview recognises the link names as a sequence which can be opened and played.
 The sequence of links to images can be used to create a video from the images.
+
 - Default directory name for VTK files is postProcessing
+
 - Example call for processing of FAST.Farm results
   foamSequenceVTKFilesForFFarm -dir postProcessing/Low -out Low -format Amb.t 
                                -mode cp -lzero false
+  foamSequenceVTKFilesForFFarm -dir postProcessing/Low -out Low -format Amb.t 
+                               -mode ln -lzero false -apath true -fs _adj.vtk
 USAGE
 }
 
@@ -75,6 +70,9 @@ out=sequencedVTK
 format=none
 mode=ln
 lzero=true
+zeroind=false
+apath=false
+fsuffix=vtk
 
 while [ "$#" -gt 0 ]
 do
@@ -112,6 +110,21 @@ do
       lzero=$2
       shift 2
       ;;
+   -zind| -zeroind)
+      [ "$#" -ge 2 ] || error "'$1' option requires an argument"
+      zeroind=$2
+      shift 2
+      ;;
+   -ap| -apath)
+      [ "$#" -ge 2 ] || error "'$1' option requires an argument"
+      apath=$2
+      shift 2
+      ;;
+   -fs| -fsuffix)
+      [ "$#" -ge 2 ] || error "'$1' option requires an argument"
+      fsuffix=$2
+      shift 2
+      ;;
    -*)
       error "invalid option '$1'"
       ;;
@@ -123,7 +136,7 @@ done
 
 [ ! -d "$dir" ] && error "Cannot find postProcessing directory, exiting."
 
-files=$(find "$dir" -type f -name "*vtk")
+files=$(find "$dir" -type f -name "*$fsuffix")
 names=$(for f in $files; do basename "$f" .vtk; done | sort -u)
 
 if [ -d "$out" ]; then
@@ -146,24 +159,42 @@ do
         LC_ALL=C  sort -k 1 -g | \
         cut -d' ' -f2)
 
-    i=0
+    if $zeroind; then
+        # Starting at -1 since the first thing in the loop is to add 1
+        # so it brings to zero.
+        i=-1
+    else
+        i=0
+    fi
+
     for f in $file_list
     do
         i=$(( i + 1 )) # Relies on ordered list of files
-        if [[ $format == "none" ]]; then
-            format=$n.
-        fi
 
         if $lzero; then
-            link=$(printf "${format}%04d.vtk" $i)
+            if [[ $format == "none" ]]; then
+                link=$(printf "${n}.%04d.vtk" $i)
+            else
+                link=$(printf "${format}%04d.vtk" $i)
+            fi
+
         else
-            link=$(printf "${format}%d.vtk" $i)
+            if [[ $format == "none" ]]; then
+                link=$(printf "${n}.%d.vtk" $i)
+            else
+                link=$(printf "${format}%d.vtk" $i)
+            fi
+
         fi
 
         if [[ $mode == "cp" ]]; then
             cp    "$f" "$out/$link"
         else
-            ln -s "../$f" "$out/$link"
+            if $apath; then
+                ln -s "$(pwd -P)/$f" "$out/$link"
+            else
+                ln -s "../$f" "$out/$link"
+            fi
         fi
     done
 done
