@@ -258,6 +258,9 @@ def plotCoherence(coh_sep,
                   fig=None, axs=None,
                   showplot=True,  
                   a=None, b=None, B=None,
+                  a_u=None, b_u=None, B_u=None,
+                  a_v=None, b_v=None, B_v=None,
+                  a_w=None, b_w=None, B_w=None,
                   xlim=None, ylim=None,
                   resetColors=False, icolor=0,
                   labelPrefix='',
@@ -284,7 +287,9 @@ def plotCoherence(coh_sep,
     fig, axs: matplotlib figure and axis
         If want to plot on top of an existing figure and axis
     a, b, B: float
-        Values for a and b (or B) for Davenport's model
+        Values for a and b (or B) for Davenport's model. Here just for backward compatiblity
+    a_{u,v,w}, b_{u,v,w}, B_{u,v,w}: float
+        Values for a and b (or B) for Davenports's model for each component individually
     xlim, ylim: tuple
         Limits for the axis
     resetColors: bool
@@ -303,6 +308,11 @@ def plotCoherence(coh_sep,
 
     import matplotlib.colors as mcolors
 
+
+    if a is not None or b is not None or B is not None:
+        print(f'  WARNING: a,b,B are deprecated. Using default (IEC) values. For given values of a, b, and B, ')
+        print( '           pass a_u, a_v, a_w, and b_{u,v,w}, B_{u,v,w} accordingly instead.')
+
     # If the user pass a list, then call the function separately for all items
     if isinstance(coh_sep, list):
         # If this is the first call and there is a list of datasets to plot, we plot the first dataset
@@ -320,7 +330,11 @@ def plotCoherence(coh_sep,
         for d in range(len(coh_sep)):
             fig, axs = plotCoherence(coh_sep[d], sep_list, meandim, umean, xaxis, xscale, qoi,
                                      fig=fig, axs=axs, showplot=False,
-                                     a=a, b=b, B=B, xlim=xlim, ylim=ylim, resetColors=resetColors, icolor=icolor,
+                                     a=a,     b=b,     B=B,
+                                     a_u=a_u, b_u=b_u, B_u=B_u,
+                                     a_v=a_v, b_v=b_v, B_v=B_v,
+                                     a_w=a_w, b_w=b_w, B_w=B_w,
+                                     xlim=xlim, ylim=ylim, resetColors=resetColors, icolor=icolor,
                                      labelPrefix=labelPrefix, **kwargs)
 
         return fig, axs
@@ -420,11 +434,16 @@ def plotCoherence(coh_sep,
             # mscoh uu
             axs[row,0].plot(f, ms_u, c=currcolor, label=label, **kwargs)
             if umean is not None:
-                axs[row,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',a=a,b=b,B=B), c=currcolor, ls='--', alpha=0.7)
+                axs[row,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',a=a_u,b=b_u,B=B_u), c=currcolor, ls='--', alpha=0.7)
             # mscoh vv
             axs[row,1].plot(f, ms_v, c=currcolor, label=label, **kwargs)
-            # mscoh vv
+            if umean is not None and a_v is not None:
+                axs[row,1].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultv',a=a_v, b=b_v, B=B_v), c=currcolor, ls='--', alpha=0.7)
+            # mscoh ww
             axs[row,2].plot(f, ms_w, c=currcolor, label=label, **kwargs)
+            if umean is not None and a_w is not None:
+                axs[row,2].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultw',a=a_w, b=b_w, B=B_w), c=currcolor, ls='--', alpha=0.7)
+
             # Set titles
             if c==0 and newAxs:
                 axs[row,0].text(0.98, 0.97, f'mscoh $\gamma^2_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
@@ -438,11 +457,16 @@ def plotCoherence(coh_sep,
             # co-coh uu
             axs[row,0].plot(f, co_u, c=currcolor, label=label, **kwargs)
             if umean is not None:
-                axs[row,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',a=a, b=b, B=B), c=currcolor, ls='--', alpha=0.7)
+                axs[row,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',a=a_u, b=b_u, B=B_u), c=currcolor, ls='--', alpha=0.7)
             # co-coh vv
             axs[row,1].plot(f, co_v, c=currcolor, label=label, **kwargs)
+            if umean is not None and a_v is not None:
+                axs[row,1].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultv',a=a_v, b=b_v, B=B_v), c=currcolor, ls='--', alpha=0.7)
             # co-coh ww
             axs[row,2].plot(f, co_w, c=currcolor, label=label, **kwargs)
+            if umean is not None and a_w is not None:
+                axs[row,2].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultw',a=a_w, b=b_w, B=B_w), c=currcolor, ls='--', alpha=0.7)
+
             # Set titles
             if c==0 and newAxs:
                 axs[row,0].text(0.98, 0.97, f'co-coh $\gamma_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
@@ -472,11 +496,16 @@ def plotCoherence(coh_sep,
             # radius coh uu
             axs[row,0].plot(f, (co_u**2+qu_u**2)**0.5, c=currcolor, label=label, **kwargs)
             if umean is not None:
-                axs[row,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',a=a, b=b, B=B), c=currcolor, ls='--', alpha=0.7)
+                axs[row,0].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultu',a=a_u, b=b_u, B=B_u), c=currcolor, ls='--', alpha=0.7)
             # radius coh vv
             axs[row,1].plot(f, (co_v**2+qu_v**2)**0.5, c=currcolor, label=label, **kwargs)
+            if umean is not None and a_v is not None:
+                axs[row,1].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultv',a=a_v, b=b_v, B=B_v), c=currcolor, ls='--', alpha=0.7)
             # radius coh ww
             axs[row,2].plot(f, (co_w**2+qu_w**2)**0.5, c=currcolor, label=label, **kwargs)
+            if umean is not None and a_w is not None:
+                axs[row,2].plot(f, davenportExpCoh(coh_sep.frequency,u=umean,delta=sep,Lc='defaultw',a=a_w, b=b_w, B=B_w), c=currcolor, ls='--', alpha=0.7)
+
             # Set titles
             if c==0 and newAxs:
                 axs[row,0].text(0.98, 0.95, f'radius coh $R_{{uu, {cohsepstr}}}$', va='top', ha='right', transform=axs[row,0].transAxes, fontsize=14)
@@ -583,11 +612,6 @@ def davenportExpCoh(f,u,delta,Lc='defaultu',a=None,b=None,B=None):
 
     '''
 
-    if Lc == 'defaultu': Lc = 8.1*42
-    elif Lc == 'defaultv': Lc = 2.7*42
-    elif Lc == 'defaultw': Lc = 0.66*42
-    else: raise valueError (f"Lc can only be `defaultu`, `defaultv`, or `defaultw`.")
-
     if a is None and b is None and B is None:
         a=12
         b=0.12
@@ -598,6 +622,12 @@ def davenportExpCoh(f,u,delta,Lc='defaultu',a=None,b=None,B=None):
 
 
     if b is not None:
+
+        if Lc == 'defaultu': Lc = 8.1*42
+        elif Lc == 'defaultv': Lc = 2.7*42
+        elif Lc == 'defaultw': Lc = 0.66*42
+        else: raise valueError (f"Lc can only be `defaultu`, `defaultv`, or `defaultw`.")
+
         if not isinstance(b,(float,int)):
             raise ValueError(f"b should be a scalar")
         if B is not None:
