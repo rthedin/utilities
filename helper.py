@@ -21,10 +21,17 @@ import matplotlib.pyplot as plt
 
 #from mmctools.helper_functions import covariance, calc_wind, calc_spectra
 str_var_common = {
-    "TKE"  : "TKE",
-    "TI"   : "TI",
+    "time"  : "time",
+    "height": "height",
+    "TKE"   : "TKE",
+    "TI"    : "TI",
     "TI_TKE":"TI_TKE",
-    "u*"   : "u*",
+    "u*"    : "calculated_u*",
+    "sigma_u/u*":"sigma_u/calc_u*",       # uu/u*
+    "sigma_v/u*":"sigma_v/calc_u*",       # vv/u*
+    "sigma_w/u*":"sigma_w/calc_u*",       # ww/u*
+    "sigma_v/sigma_u":"sigma_v/sigma_u",  # vv/uu
+    "sigma_w/sigma_u":"sigma_w/sigma_u",  # ww/uu
 }
 str_var_sowfa = {
     "wspd" : "wspd",
@@ -34,10 +41,11 @@ str_var_sowfa = {
     "uw"   : "uw",
     "uu"   : "uu",
     "vv"   : "vv",
-    "ww"    : "ww",
+    "ww"   : "ww",
     "u"    : "u",
     "v"    : "v",
     "w"    : "w",
+    # it will crash if asking for ustar here. ustar is not an output from sowfa
     **str_var_common
 }
 str_var_amr = {
@@ -52,6 +60,7 @@ str_var_amr = {
     "u"    : "u",
     "v"    : "v",
     "w"    : "w",
+    "ustar": "ustar",  # from LES
     **str_var_common
 }
 
@@ -194,7 +203,7 @@ def calc_stats(df,offset='10min'):
 
 
 
-# from https://github.com/a2e-mmc/assessment/blob/study/coupling_comparison/studies/coupling_comparison/helpers.py
+# based on https://github.com/a2e-mmc/assessment/blob/study/coupling_comparison/studies/coupling_comparison/helpers.py
 def calc_QOIs(df, code='sowfa'):
     """
     Calculate derived quantities (IN PLACE)
@@ -207,15 +216,42 @@ def calc_QOIs(df, code='sowfa'):
         raise ValueError("Code options: 'sowfa', 'amr'")
 
     from mmctools.helper_functions import calc_wind 
+
     if str_var['wspd'] not in df.keys() and str_var['wdir'] not in df.keys():
         df[str_var['wspd']],df[str_var['wdir']] = calc_wind(df,u=str_var['u'],v=str_var['v'])
+
     df[str_var['u*']] = (df[str_var['uw']]**2 + df[str_var['vw']]**2)**0.25
     df[str_var['TKE']] = 0.5*(df[str_var['uu']] + df[str_var['vv']] + df[str_var['ww']])
     ang = np.arctan2(df[str_var['v']],df[str_var['u']])
     df[str_var['TI']] = df[str_var['uu']]*np.cos(ang)**2 + 2*df[str_var['uv']]*np.sin(ang)*np.cos(ang) + df[str_var['vv']]*np.sin(ang)**2
     df[str_var['TI']] = np.sqrt(df[str_var['TI']]) / df[str_var['wspd']]
+
     # TI as typical equations, based on TKE (same as AMR-Wind's TI TKE)
     df[str_var['TI_TKE']] = np.sqrt((df[str_var['uu']]+df[str_var['vv']]+df[str_var['ww']])/3.0)/np.sqrt(df[str_var['u']]**2 + df[str_var['v']]**2)
+
+    # Let's also compute the non-dimension variances
+    df[str_var['sigma_u/u*']] = (df[str_var['uu']])**0.5/df[str_var['u*']]
+    df[str_var['sigma_v/u*']] = (df[str_var['vv']])**0.5/df[str_var['u*']]
+    df[str_var['sigma_w/u*']] = (df[str_var['ww']])**0.5/df[str_var['u*']]
+    df[str_var['sigma_v/sigma_u']] = (df[str_var['vv']])**0.5 / (df[str_var['uu']])**0.5
+    df[str_var['sigma_w/sigma_u']] = (df[str_var['ww']])**0.5 / (df[str_var['uu']])**0.5
+
+    # non-dimensional shear Phi. Doing finite diff on the log space for accuracy
+    #dUdz = np.empty((len(df[str_var['time']]),len(df[str_var['height']]),));  dUdz[:,:] = np.nan
+    #dU = df[str_var['wspd']  ].isel({str_var['height']:slice(1,None)}).values - df[str_var['wspd']  ].isel({str_var['height']:slice(None,-1)}).values
+    #dZ = df[str_var['height']].isel({str_var['height']:slice(1,None)}).values - df[str_var['height']].isel({str_var['height']:slice(None,-1)}).values
+    #dUdz[:,1:] = dU/dZ
+
+
+    #logz = np.log(ds[srt_var['height'])
+    #dlogz =  logz.isel({str_var['height']:slice(1,None)}).values - logz.isel({str_var['height']:slice(None,-1)}).values
+    #dU = ds[str_var['wspd']].isel({str_var['height']:slice(1,None)}).values - ds[str_var['wpsp']].isel(str_var['height']:slice(None,-1)}).values
+
+    #dUdz = np.empty((len(df[str_var['time']]),len(df[str_var['height']]),));  dUdz[:,:] = np.nan
+    #dUdz[:,1:] = dU/dlogz * (1/ ds['height'].isel(height=slice(1,None)).values)
+    #kappa = 0.41
+    #ds[str_var['Phi_m']] = ((str_var['time'],str_var['height']), kappa*dUdz/df[str_var['ustar']].values)
+    #ds[str_var['Phi_m']] = df[str_var['Phi_m']]*df[str_var['height']]
 
 
 
@@ -402,15 +438,21 @@ def calc_streamwise (df, dfwdir, height=None, extrapolateHeights=True, showCorio
         wdir_at_same_coords = dfwdir.interp({dfwdirdatetimevar:df[dfdatetimevar], dfwdirheightvar:heightInterp}, kwargs={"fill_value": "extrapolate"})
     else:
         wdir_at_same_coords = dfwdir.interp({dfwdirdatetimevar:df[datetimevar], dfheightvarheightvar:heightInterp})
-     
+
+    # Right now, we might have both time and datetime in the wdir_at_same_coords dataset because of the
+    # interpolation. Depends on the variale name. Before combining, remove time coordinate, if not a dimension coordinate
+    if dfdatetimevar == 'datetime':
+        # If here, datetime also exists on wdir_at_same_coords due to the interp function call above and is
+        # a dimension coordinate (that is, a bold dimension). In that case, let's drop the original `time`.
+        wdir_at_same_coords = wdir_at_same_coords.drop('time')
 
     if showCoriolis:
         # Rename for clarity and drop height from coordinates since it no longer varies with height
         wdir_at_same_coords = wdir_at_same_coords.rename({'wdir': f'wdirAt{refheight}'})
         wdir_at_same_coords = wdir_at_same_coords.isel(height=1).squeeze()
 
-        # Add wdir information to main dataset
-        rotdf = xr.combine_by_coords([df, wdir_at_same_coords])
+        # Add wdir information to main dataset. Maybe the join need to use the df timestamps? (see commented out join=left)
+        rotdf = xr.combine_by_coords([df, wdir_at_same_coords])#, join='left')
         wdir = rotdf[f'wdirAt{refheight}']
     else:
         # Add wdir information to main dataset
