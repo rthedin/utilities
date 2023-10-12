@@ -219,6 +219,8 @@ def calc_QOIs(df, code='sowfa'):
 
     if str_var['wspd'] not in df.keys() and str_var['wdir'] not in df.keys():
         df[str_var['wspd']],df[str_var['wdir']] = calc_wind(df,u=str_var['u'],v=str_var['v'])
+    elif str_var['wdir'] not in df.keys():
+        _, df[str_var['wdir']] = calc_wind(df, u=str_var['u'], v=str_var['v'])
 
     df[str_var['u*']] = (df[str_var['uw']]**2 + df[str_var['vw']]**2)**0.25
     df[str_var['TKE']] = 0.5*(df[str_var['uu']] + df[str_var['vv']] + df[str_var['ww']])
