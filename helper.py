@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 str_var_common = {
     "time"  : "time",
     "height": "height",
+    "wdir"  : "wdir",
     "TKE"   : "TKE",
     "TI"    : "TI",
     "TI_TKE":"TI_TKE",
@@ -35,7 +36,6 @@ str_var_common = {
 }
 str_var_sowfa = {
     "wspd" : "wspd",
-    "wdir" : "wdir",
     "uv"   : "uv",
     "vw"   : "vw",
     "uw"   : "uw",
@@ -50,7 +50,6 @@ str_var_sowfa = {
 }
 str_var_amr = {
     "wspd" : "hvelmag",
-    "wdir" : "wdir",
     "uv"   : "u'v'_r",
     "vw"   : "v'w'_r",
     "uw"   : "u'w'_r",
@@ -231,6 +230,7 @@ def calc_QOIs(df, code='sowfa'):
     # TI as typical equations, based on TKE (same as AMR-Wind's TI TKE)
     df[str_var['TI_TKE']] = np.sqrt((df[str_var['uu']]+df[str_var['vv']]+df[str_var['ww']])/3.0)/np.sqrt(df[str_var['u']]**2 + df[str_var['v']]**2)
 
+
     # Let's also compute the non-dimension variances
     df[str_var['sigma_u/u*']] = (df[str_var['uu']])**0.5/df[str_var['u*']]
     df[str_var['sigma_v/u*']] = (df[str_var['vv']])**0.5/df[str_var['u*']]
@@ -256,6 +256,24 @@ def calc_QOIs(df, code='sowfa'):
     #ds[str_var['Phi_m']] = df[str_var['Phi_m']]*df[str_var['height']]
 
 
+
+def calc_veer(ds, between_height=[40, 250], code='amr'):
+    '''
+    Calculate wind veer in degrees/m between the heights specified by `between_height`
+    '''
+    if code == 'sowfa':
+        str_var = str_var_sowfa
+    elif code == 'amr' or code == 'amrwind':
+        str_var = str_var_amr
+    else:
+        raise ValueError("Code options: 'sowfa', 'amr'")
+
+    # Calculate veer
+    wdir = ds.sel(height=slice(between_height[0],between_height[1]))[str_var['wdir']]
+    veer = wdir.polyfit(dim=str_var['height'],deg=1)
+    ds['veer_deg/m'] = (('time'),  veer.sel(degree=1)['polyfit_coefficients'].data )
+
+    return ds
 
 # adapted from https://stackoverflow.com/questions/20105364
 def density_scatter( x , y, ax = None, fig=None, sort = True, bins = 20, colorbar=True, **kwargs )   :
