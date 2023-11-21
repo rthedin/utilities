@@ -28,11 +28,11 @@ str_var_common = {
     "TI"    : "TI",
     "TI_TKE":"TI_TKE",
     "u*"    : "calculated_u*",
-    "sigma_u/u*":"sigma_u/calc_u*",       # uu/u*
-    "sigma_v/u*":"sigma_v/calc_u*",       # vv/u*
-    "sigma_w/u*":"sigma_w/calc_u*",       # ww/u*
-    "sigma_v/sigma_u":"sigma_v/sigma_u",  # vv/uu
-    "sigma_w/sigma_u":"sigma_w/sigma_u",  # ww/uu
+    "sigma_u_over_u*":"sigma_u_over_calc_u*",       # uu/u*
+    "sigma_v_over_u*":"sigma_v_over_calc_u*",       # vv/u*
+    "sigma_w_over_u*":"sigma_w_over_calc_u*",       # ww/u*
+    "sigma_v_over_sigma_u":"sigma_v_over_sigma_u",  # vv/uu
+    "sigma_w_over_sigma_u":"sigma_w_over_sigma_u",  # ww/uu
 }
 str_var_sowfa = {
     "wspd" : "wspd",
@@ -232,11 +232,11 @@ def calc_QOIs(df, code='sowfa'):
 
 
     # Let's also compute the non-dimension variances
-    df[str_var['sigma_u/u*']] = (df[str_var['uu']])**0.5/df[str_var['u*']]
-    df[str_var['sigma_v/u*']] = (df[str_var['vv']])**0.5/df[str_var['u*']]
-    df[str_var['sigma_w/u*']] = (df[str_var['ww']])**0.5/df[str_var['u*']]
-    df[str_var['sigma_v/sigma_u']] = (df[str_var['vv']])**0.5 / (df[str_var['uu']])**0.5
-    df[str_var['sigma_w/sigma_u']] = (df[str_var['ww']])**0.5 / (df[str_var['uu']])**0.5
+    df[str_var['sigma_u_over_u*']] = (df[str_var['uu']])**0.5/df[str_var['u*']]
+    df[str_var['sigma_v_over_u*']] = (df[str_var['vv']])**0.5/df[str_var['u*']]
+    df[str_var['sigma_w_over_u*']] = (df[str_var['ww']])**0.5/df[str_var['u*']]
+    df[str_var['sigma_v_over_sigma_u']] = (df[str_var['vv']])**0.5 / (df[str_var['uu']])**0.5
+    df[str_var['sigma_w_over_sigma_u']] = (df[str_var['ww']])**0.5 / (df[str_var['uu']])**0.5
 
     # non-dimensional shear Phi. Doing finite diff on the log space for accuracy
     #dUdz = np.empty((len(df[str_var['time']]),len(df[str_var['height']]),));  dUdz[:,:] = np.nan
@@ -271,7 +271,7 @@ def calc_veer(ds, between_height=[40, 250], code='amr'):
     # Calculate veer
     wdir = ds.sel(height=slice(between_height[0],between_height[1]))[str_var['wdir']]
     veer = wdir.polyfit(dim=str_var['height'],deg=1)
-    ds['veer_deg/m'] = (('time'),  veer.sel(degree=1)['polyfit_coefficients'].data )
+    ds['veer_deg_per_m'] = (('time'),  veer.sel(degree=1)['polyfit_coefficients'].data )
 
     return ds
 
