@@ -63,6 +63,9 @@ str_var_amr = {
     **str_var_common
 }
 
+def cosd(a): return np.cos(np.deg2rad(a))
+def sind(a): return np.sin(np.deg2rad(a))
+
 def myupdraftscale(vmin=-1, vmax=1, thresh=0.85):
     '''
     Custom colormap for updraft with threshold. Threshold constant at 0.85 m/s
