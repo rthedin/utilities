@@ -46,19 +46,52 @@ curr_cap_nodes = total_sn_r + total_mn_r
 print(f'{len(df)} total jobs; {len(running)} are running, {len(queued)} are queued')
 print(f'Out of {len(running)} running jobs, {len(singlen_running)} are single node, {len(multiplen_running)} are multi-node')
 print(f'Out of {len(queued)} queued jobs, {len(singlen_queued)} are single node, {len(multiplen_queued)} are multi-node')
-print(f'Current system resources: {100*total_sn_r/curr_cap_nodes:.1f}% taken by single-node jobs; {100*total_mn_r/curr_cap_nodes:.1f}% taken by multiple-node jobs')
+print(f'Current system resources: {100*total_sn_r/curr_cap_nodes:.1f}% taken by single-node jobs; {100*total_mn_r/curr_cap_nodes:.1f}% taken by multiple-node jobs\n\n')
 
-print(f'\nTop users with total running jobs')
-for user, count in user_counts_list_running[:8]:
-    print(f"User: {user},      \t running jobs: {count} ({100*count/len(running):.1f}% of jobs; {100*total_running_nodes_by_user[user]/total_running_nodes:.1f}% of resources)")
 
-print(f'\n   Top users running single-node jobs')
+print('Top users with total running jobs')
+print('------------------------------------------------------------------')
+print('|     USER       | TOTAL RUNNING | PERCENT OF TOTAL | PERCENT OF |')
+print('|                |     JOBS      |   RUNNING JOBS   | RESOURCES  |')
+print('------------------------------------------------------------------')
+for user, count in user_counts_list_running[:10]:
+    perctotal = 100*count/len(running)
+    percres   = 100*total_running_nodes_by_user[user]/total_running_nodes
+    print(f'| {user:<15}| {count:<14}| {perctotal:<17.1f}| {percres:<11.1f}|')
+print('------------------------------------------------------------------\n')
+
+print('    Top users running single-node jobs')
+print('    ------------------------------------------------------------------')
+print('    |     USER       |  SINGLE-NODE  | PERCENT OF TOTAL | PERCENT OF |')
+print('    |                |  RUNNING JOBS |   RUNNING JOBS   | RESOURCES  |')
+print('    ------------------------------------------------------------------')
 for user, count in user_counts_list_running_singlenode[:8]:
-    print(f"   User: {user},    \t single-node running jobs: {count} ({100*count/len(running):.1f}% of jobs; {100*sn_r_by_user[user]/curr_cap_nodes:.1f}% of resources)")
-print(f'\n   Top users running multiple-node jobs')
-for user, count in user_counts_list_running_multiplenode[:8]:
-    print(f"   User: {user},    \t multiple-node running jobs: {count} ({100*count/len(running):.1f}% of jobs; {100*mn_r_by_user[user]/curr_cap_nodes:.1f}% of resources)")
+    perctotal = 100*count/len(running)
+    percres   = 100*sn_r_by_user[user]/curr_cap_nodes
+    print(f'    | {user:<15}| {count:<14}| {perctotal:<17.1f}| {percres:<11.1f}|')
+print('    ------------------------------------------------------------------\n')
 
-print(f'\nTop users with queued jobs')
+
+print('    Top users running multiple-node jobs')
+print('    ------------------------------------------------------------------')
+print('    |     USER       | MULTIPLE-NODE | PERCENT OF TOTAL | PERCENT OF |')
+print('    |                | RUNNING JOBS  |   RUNNING JOBS   | RESOURCES  |')
+print('    ------------------------------------------------------------------')
+for user, count in user_counts_list_running_multiplenode[:8]:
+    perctotal = 100*count/len(running)
+    percres   = 100*mn_r_by_user[user]/curr_cap_nodes
+    print(f'    | {user:<15}| {count:<14}| {perctotal:<17.1f}| {percres:<11.1f}|')
+print('    ------------------------------------------------------------------\n')
+
+
+print('Top users with queued jobs')
+print('--------------------------------------------------------------------')
+print('|     USER       | TOTAL QUEUED | TOTAL NUMBER | PERCENT OF CURRENT|')
+print('|                |    JOBS      |   OF NODES   | SYSTEM CAPACITY   |')
+print('--------------------------------------------------------------------')
 for user, count in user_counts_list_queued[:8]:
-    print(f"User: {user},\t total queued jobs: {count} ({total_queued_nodes_by_user[user]} nodes; {100*total_queued_nodes_by_user[user]/curr_cap_nodes:.1f}% of entire system current capacity)")
+    totalnodes = total_queued_nodes_by_user[user]
+    percres    = 100*total_queued_nodes_by_user[user]/curr_cap_nodes
+    print(f'| {user:<15}| {count:<13}| {totalnodes:<13.1f}| {percres:<18.1f}|')
+print('--------------------------------------------------------------------\n\n')
+
