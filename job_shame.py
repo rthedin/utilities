@@ -60,8 +60,8 @@ print(f'-----------------------------------------------------------------\n')
 
 print('Top users by total running jobs')
 print('-----------------------------------------------------------------')
-print('|     USER      | TOTAL RUNNING | PERCENT OF TOTAL | PERCENT OF |')
-print('|               |     JOBS      |   RUNNING JOBS   | RESOURCES  |')
+print('|     USER      | TOTAL RUNNING | PERCENT OF TOTAL | RESOURCES  |')
+print('|               |     JOBS      |   RUNNING JOBS   | (PERCENT)  |')
 print('-----------------------------------------------------------------')
 for user, count in user_counts_list_running[:10]:
     perctotal = 100*count/len(running)
@@ -70,29 +70,29 @@ for user, count in user_counts_list_running[:10]:
 print('-----------------------------------------------------------------\n')
 
 print(' Top users running single-node jobs')
-print(' ----------------------------------------------------------------')
-print(' |     USER      | SINGLE-NODE  | PERCENT OF TOTAL | PERCENT OF |')
-print(' |               | RUNNING JOBS |   RUNNING JOBS   | RESOURCES  |')
-print(' ----------------------------------------------------------------')
+print(' ---------------------------------------------------------------')
+print(' |     USER      | SINGLE-NODE  | PERCENT OF TOTAL | RESOURCES |')
+print(' |               | RUNNING JOBS |   RUNNING JOBS   | (PERCENT) |')
+print(' ---------------------------------------------------------------')
 for user, count in user_counts_list_running_singlenode[:8]:
     perctotal = 100*count/len(running)
     percres   = 100*sn_r_by_user[user]/curr_cap_nodes
-    print(f' | {user:<14}| {count:<13}| {perctotal:<17.1f}| {percres:<11.1f}|')
-print(' ----------------------------------------------------------------\n')
+    print(f' | {user:<14}| {count:<13}| {perctotal:<17.1f}| {percres:<10.1f}|')
+print(' ---------------------------------------------------------------\n')
 
 
 print(' Top users running multi-node jobs')
-print(' ----------------------------------------------------------------')
-print(' |               |  MULTI-NODE  |    PERCENT OF    |  PERCENT   |')
-print(' |     USER      |   RUNNING    |   TOTAL RUNNING  |     OF     |')
-print(' |               | JOBS | NODES |       JOBS       | RESOURCES  |')
-print(' ----------------------------------------------------------------')
+print(' ---------------------------------------------------------------')
+print(' |               |  MULTI-NODE  |    PERCENT OF    | RESOURCES |')
+print(' |     USER      |   RUNNING    |   TOTAL RUNNING  | (PERCENT) |')
+print(' |               | JOBS | NODES |       JOBS       |           |')
+print(' ---------------------------------------------------------------')
 for user, count in user_counts_list_running_multiplenode[:8]:
     perctotal = 100*count/len(running)
     percres   = 100*mn_r_by_user[user]/curr_cap_nodes
     nnodes    = mn_r_by_user[user]
-    print(f' | {user:<14}| {count:<5}| {nnodes:<6}| {perctotal:<17.1f}| {percres:<11.1f}|')
-print(' ----------------------------------------------------------------\n')
+    print(f' | {user:<14}| {count:<5}| {nnodes:<6}| {perctotal:<17.1f}| {percres:<10.1f}|')
+print(' ---------------------------------------------------------------\n')
 
 
 print('Top users with queued jobs')
