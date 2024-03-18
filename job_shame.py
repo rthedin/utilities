@@ -53,8 +53,8 @@ print(f'-----------------------------------------------------------------')
 print(f'|         |       SINGLE-NODE        |        MULTI-NODE        |')
 print(f'|         |  JOBS | NODES | RESOUR.  |   JOBS | NODES | RESOUR. |')
 print(f'-----------------------------------------------------------------')
-print(f'| RUNNING | {len(singlen_running):<6}| {total_sn_r:<6}| {100*total_sn_r/curr_cap_nodes:.1f} %   |   {len(multiplen_running):<5}| {total_mn_r:<6}| {100*total_mn_r/curr_cap_nodes:.1f} %  |')
-print(f'| QUEUED  | {len(singlen_queued):<6}| {total_sn_q:<6}| {100*total_sn_q/curr_cap_nodes:.1f} %  |   {len(multiplen_queued):<5}| {total_mn_q:<6}| {100*total_mn_q/curr_cap_nodes:.1f} %  |')
+print(f'| RUNNING | {len(singlen_running):<6}| {total_sn_r:<6}| {100*total_sn_r/curr_cap_nodes:<4.1f} %   |   {len(multiplen_running):<5}| {total_mn_r:<6}| {100*total_mn_r/curr_cap_nodes:.1f} %  |')
+print(f'| QUEUED  | {len(singlen_queued):<6}| {total_sn_q:<6}| {100*total_sn_q/curr_cap_nodes:<4.1f} %  |   {len(multiplen_queued):<5}| {total_mn_q:<6}| {100*total_mn_q/curr_cap_nodes:<4.1f} % |')
 print(f'-----------------------------------------------------------------\n')
 
 
