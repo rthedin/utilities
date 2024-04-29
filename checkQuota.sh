@@ -16,7 +16,7 @@ checkQuota()
         error=$(lfs project -d /projects/$proj 2>&1 >/dev/null)
         if [[ -n "$error" ]]; then continue; fi
 
-        proj_id=$(lfs project -d /projects/$proj | cut -f2 -d " ")
+        proj_id=$(lfs project -d /projects/$proj | awk '{$1=$1; print}'| cut -f1 -d " ")
         proj_all=$(lfs quota -hp $proj_id /projects/$proj | grep "T")
 
         if [ ${#proj} -lt 6 ]; then
