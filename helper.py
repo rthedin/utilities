@@ -33,6 +33,7 @@ str_var_common = {
     "sigma_w_over_u*":"sigma_w_over_calc_u*",       # ww/u*
     "sigma_v_over_sigma_u":"sigma_v_over_sigma_u",  # vv/uu
     "sigma_w_over_sigma_u":"sigma_w_over_sigma_u",  # ww/uu
+    "Phi_m": "Phi_m",  # non-dim shear
 }
 str_var_sowfa = {
     "wspd" : "wspd",
@@ -241,22 +242,33 @@ def calc_QOIs(df, code='sowfa'):
     df[str_var['sigma_v_over_sigma_u']] = (df[str_var['vv']])**0.5 / (df[str_var['uu']])**0.5
     df[str_var['sigma_w_over_sigma_u']] = (df[str_var['ww']])**0.5 / (df[str_var['uu']])**0.5
 
-    # non-dimensional shear Phi. Doing finite diff on the log space for accuracy
-    #dUdz = np.empty((len(df[str_var['time']]),len(df[str_var['height']]),));  dUdz[:,:] = np.nan
-    #dU = df[str_var['wspd']  ].isel({str_var['height']:slice(1,None)}).values - df[str_var['wspd']  ].isel({str_var['height']:slice(None,-1)}).values
-    #dZ = df[str_var['height']].isel({str_var['height']:slice(1,None)}).values - df[str_var['height']].isel({str_var['height']:slice(None,-1)}).values
-    #dUdz[:,1:] = dU/dZ
 
+def calc_nondimshear(ds, code='amr'):
+    '''
+    Caculates Phi, the non-dimensional shear parameter (in place)
+    '''
+    if code == 'sowfa':
+        str_var = str_var_sowfa
+    elif code == 'amr' or code == 'amrwind':
+        str_var = str_var_amr
+    else:
+        raise ValueError("Code options: 'sowfa', 'amr'")
 
-    #logz = np.log(ds[srt_var['height'])
-    #dlogz =  logz.isel({str_var['height']:slice(1,None)}).values - logz.isel({str_var['height']:slice(None,-1)}).values
-    #dU = ds[str_var['wspd']].isel({str_var['height']:slice(1,None)}).values - ds[str_var['wpsp']].isel(str_var['height']:slice(None,-1)}).values
+    # Doing finite diff on the log space for accuracy
+    dUdz = np.empty((len(ds[str_var['time']]),len(ds[str_var['height']]),));  dUdz[:,:] = np.nan
+    dU = ds[str_var['wspd']  ].isel({str_var['height']:slice(1,None)}).values - ds[str_var['wspd']  ].isel({str_var['height']:slice(None,-1)}).values
+    dZ = ds[str_var['height']].isel({str_var['height']:slice(1,None)}).values - ds[str_var['height']].isel({str_var['height']:slice(None,-1)}).values
+    dUdz[:,1:] = dU/dZ
 
-    #dUdz = np.empty((len(df[str_var['time']]),len(df[str_var['height']]),));  dUdz[:,:] = np.nan
-    #dUdz[:,1:] = dU/dlogz * (1/ ds['height'].isel(height=slice(1,None)).values)
-    #kappa = 0.41
-    #ds[str_var['Phi_m']] = ((str_var['time'],str_var['height']), kappa*dUdz/df[str_var['ustar']].values)
-    #ds[str_var['Phi_m']] = df[str_var['Phi_m']]*df[str_var['height']]
+    logz = np.log(ds[str_var['height']])
+    dlogz =  logz.isel({str_var['height']:slice(1,None)}).values - logz.isel({str_var['height']:slice(None,-1)}).values
+    dU = ds[str_var['wspd']].isel({str_var['height']:slice(1,None)}).values - ds[str_var['wspd']].isel({str_var['height']:slice(None,-1)}).values
+
+    dUdz = np.empty((len(ds[str_var['time']]),len(ds[str_var['height']]),));  dUdz[:,:] = np.nan
+    dUdz[:,1:] = dU/dlogz * (1/ ds['height'].isel(height=slice(1,None)).values)
+    kappa = 0.41
+    ds[str_var['Phi_m']] = ((str_var['time'],str_var['height']), kappa*dUdz/ds[str_var['ustar']].values)
+    ds[str_var['Phi_m']] = ds[str_var['Phi_m']]*ds[str_var['height']]
 
 
 
