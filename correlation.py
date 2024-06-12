@@ -261,7 +261,8 @@ def averageSubdomains(dsv, nSubDomainsX, nSubDomainsY, ds=None,
 
     # Get clipped-in-space wspd and wdir values based on subdomains considered (excludes skips)
     Lsubdom = xSubDom[1]-xSubDom[0]
-    ds = ds.sel(x=slice(xmin+nSubDomainsSkipW*Lsubdom,xmax-nSubDomainsSkipE*Lsubdom), y=slice(ymin+nSubDomainsSkipS*Lsubdom,ymax-nSubDomainsSkipN*Lsubdom) )
+    if isinstance(ds, xr.Dataset):
+        ds = ds.sel(x=slice(xmin+nSubDomainsSkipW*Lsubdom,xmax-nSubDomainsSkipE*Lsubdom), y=slice(ymin+nSubDomainsSkipS*Lsubdom,ymax-nSubDomainsSkipN*Lsubdom) )
 
     avgv = []
     for t, d in enumerate(dsv.datetime):
