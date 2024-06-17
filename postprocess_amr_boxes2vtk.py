@@ -1,4 +1,4 @@
-#!/home/rthedin/.conda/envs/ssrs_env_scratch/bin/python
+#!/home/rthedin/.conda-envs/ssrs_env/bin/python
 
 #SBATCH --job-name=pp_vtk
 #SBATCH --output amr2post_vtk.log.%j
@@ -42,7 +42,7 @@ from itertools import repeat
 from multiprocessing import Pool, freeze_support
 from windtools.amrwind.post_processing  import Sampling
 
-def main(samplingboxfile, pppath, requestedgroup, outpath, dt, t0, itime, ftime, steptime, offsetz):
+def main(samplingboxfile, pppath, requestedgroup, outpath, dt, t0, itime, ftime, steptime, offsetz, vtkstartind):
 
     # -------- CONFIGURE RUN
     samplingboxpath = os.path.join(pppath,samplingboxfile)
@@ -84,15 +84,15 @@ def main(samplingboxfile, pppath, requestedgroup, outpath, dt, t0, itime, ftime,
         ftime = s.ndt
 
     # Split all the time steps in arrays of roughly the same size
-    chunks =  np.array_split(range(itime,ftime), 36)
-    # The lists itime_list and ftime_list below will fail if ftime-itime is less than 36, since a
+    chunks =  np.array_split(range(itime,ftime), 96)
+    # The lists itime_list and ftime_list below will fail if ftime-itime is less than 96, since a
     # non-homogeneous numpy array will be created. If that is the case, let's issue a warning and 
     # end the program here.
-    if ftime-itime < 36:
+    if ftime-itime < 96:
         raise ValueError(f'The number of boxes is lower than the number of cores. Stopping. A fix '\
                          f'for this error is to provide a new value for the number of nodes in the '\
                          f'2_saveVTK script. For example, for the low box, selection of nNodes_low '\
-                         f'needs to be such that (ftime_low-itime_low)/nNodes_low is larger than 36.')
+                         f'needs to be such that (ftime_low-itime_low)/nNodes_low is larger than 96.')
 
     # Now, get the beginning and end of each separate chunk
     itime_list = [i[0]    for i in chunks]
@@ -108,7 +108,8 @@ def main(samplingboxfile, pppath, requestedgroup, outpath, dt, t0, itime, ftime,
                                   itime_list,            # itime
                                   ftime_list,            # ftime
                                   repeat(t0),            # t0
-                                  repeat(dt)             # dt
+                                  repeat(dt),            # dt
+                                  repeat(vtkstartind)    # vtkstartind
                                  )
                               )
     print('Finished.')
@@ -126,7 +127,7 @@ if __name__ == '__main__':
                         help="case full path (default cwd)")
     parser.add_argument("--ncfile", "-f", type=str, default=None,
                         help="netcdf sampling planes")
-    parser.add_argument("--dt", "-dt",    type=float, default=None,
+    parser.add_argument("--dt", "-dt", default=None,
                         help="time step for naming the boxes output")
     parser.add_argument("--initialtime", "-t0", default=None,
                         help="Time step related to first box output (optional)")
@@ -140,19 +141,22 @@ if __name__ == '__main__':
                         help="sampling time step increment to save the data")
     parser.add_argument("--offsetz", "-offsetz",  type=float, default=None,
                         help="Offset in the x direction, ensuring a point at hub height")
+    parser.add_argument("--vtkstartind", "-vtkstartind", default=0,
+                        help="Index by which the names of the vtk files will be shifted")
 
     args = parser.parse_args()
 
     # Parse inputs
-    path     = args.path
-    ncfile   = args.ncfile
-    dt       = args.dt
-    t0       = args.initialtime
-    group    = args.group
-    itime    = args.itime
-    ftime    = args.ftime
-    steptime = args.steptime
-    offsetz  = args.offsetz
+    path        = args.path
+    ncfile      = args.ncfile
+    dt          = args.dt
+    t0          = args.initialtime
+    group       = args.group
+    itime       = args.itime
+    ftime       = args.ftime
+    steptime    = args.steptime
+    offsetz     = args.offsetz
+    vtkstartind = args.vtkstartind
 
     # ------------------------------------------------------------------------------
     # --------------------------- DONE PARSING INPUTS ------------------------------
@@ -187,11 +191,19 @@ if __name__ == '__main__':
     else:
         raise ValueError(f"the ncfile should be a string. Received {ncfile}.")
 
-    if dt is not None and  not isinstance(dt,(float,int)):
-        raise ValueError(f'dt should be a scalar.')
+    if isinstance(dt,str):
+        try:    dt=float(dt)
+        except: pass
+    if dt == 'None': dt=None
+    if dt is not None and not isinstance(dt,(float,int)):
+        raise ValueError(f'dt should be a scalar. Received {dt}.')
 
-    if t0 is not None and  not isinstance(t0,(float,int)):
-        raise ValueError(f't0 should be a scalar.')
+    if isinstance(t0,str):
+        try:    t0=float(t0)
+        except: pass
+    if t0 == 'None': t0=None
+    if t0 is not None and not isinstance(t0,(float,int)):
+        raise ValueError(f't0 should be a scalar. Received {t0}, type {type(t0)}.')
 
     if steptime < 1:
         raise ValueError(f'The time step increment should be >= 1.')
@@ -208,6 +220,13 @@ if __name__ == '__main__':
         print(f'!!! WARNING: no offset in z has been given. Ensure you will have a point at hub height.')
         offsetz=0
 
+    if isinstance(vtkstartind,str):
+        try:    vtkstartind=int(vtkstartind)
+        except: pass
+    if vtkstartind == 'None': vtkstartind=None
+    if vtkstartind is not None and not isinstance(vtkstartind,int):
+        raise ValueError(f'vtkstartind should be either None or an integer. Received {vtkstartind}.')
+
     # ------------------------------------------------------------------------------
     # ---------------------------- DONE WITH CHECKS --------------------------------
     # ------------------------------------------------------------------------------
@@ -216,6 +235,6 @@ if __name__ == '__main__':
 
     print(f'Starting job at {time.ctime()}')
     freeze_support()
-    main(ncfile, pppath, group, outpath, dt, t0, itime, ftime, steptime, offsetz)
+    main(ncfile, pppath, group, outpath, dt, t0, itime, ftime, steptime, offsetz, vtkstartind)
     print(f'Ending job at   {time.ctime()}')
 
