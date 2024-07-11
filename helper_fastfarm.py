@@ -14,7 +14,7 @@ import os, sys
 from multiprocessing import Pool
 from itertools import repeat
 
-from pyFAST.input_output import TurbSimFile, FASTOutputFile, VTKFile, FASTInputFile
+from openfast_toolbox.io import TurbSimFile, FASTOutputFile, VTKFile, FASTInputFile
 
 
 def readTurbineOutputPar(caseobj, dt_openfast, dt_processing, saveOutput=True, output='zarr',
@@ -211,6 +211,9 @@ def readTurbineOutput(caseobj, dt_openfast, dt_processing=1, saveOutput=True, ou
                         print(f'Processing Condition {cond}, Case {case}, Seed {seed}, turbine {t+1}')
                         ff_file = os.path.join(caseobj.path, caseobj.condDirList[cond], caseobj.caseDirList[case], f'Seed_{seed}', f'FFarm_mod.T{t+1}.outb')
                         df   = FASTOutputFile(ff_file).toDataFrame()
+                        # Won't be able to send to xarray if columns are non-unique
+                        if not df.columns.is_unique:
+                            df = df.T.groupby(df.columns).first().T
                         ds_t = df.rename(columns={'Time_[s]':'time'}).set_index('time').to_xarray()
                         ds_t = ds_t.isel(time=slice(0,None,dt_ratio))
                         ds_t = ds_t.expand_dims(['cond','case','seed','turbine']).assign_coords({'cond': [caseobj.condDirList[cond]],
