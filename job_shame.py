@@ -24,6 +24,12 @@ user_count_list_q = [(user, count) for user, count in zip(user_count_q.index, us
 user_count_list_r_sn = [(user, count) for user, count in zip(user_count_r_sn.index, user_count_r_sn)]
 user_count_list_r_mn = [(user, count) for user, count in zip(user_count_r_mn.index, user_count_r_mn)]
 
+# Count per number of nodes for multi-node runs
+node_user_count_r_mn = mn_r.groupby('USER').agg({'NODES': 'sum', 'USER': 'count'}).rename(columns={'USER': 'LINES'})
+node_user_count_r_mn = node_user_count_r_mn.sort_values(by='NODES', ascending=False)
+node_user_count_list_r_mn = list(node_user_count_r_mn.itertuples(index=True, name=None))
+
+
 # Futher split between regular and standby
 sn_r_stdby = sn_r[sn_r['PARTITION'].str.endswith('stdby')]
 mn_r_stdby = mn_r[mn_r['PARTITION'].str.endswith('stdby')]
@@ -118,16 +124,16 @@ print(f'   │               │    MULTI-NODE    │    PERCENT OF    │ RESOU
 print(f'   │     USER      │     RUNNING      │   TOTAL RUNNING  │ (PERCENT) │')
 print(f'   │               │ JOBS │   NODES   │       JOBS       │           │')
 print(f'   ├───────────────┼──────┼───────────┼──────────────────┼───────────┤')
-for user, count in user_count_list_r_mn[:8]:
-    perctot = 100*count/len(r)
+for user, ncount, jcount in node_user_count_list_r_mn[:8]:
+    perctot = 100*jcount/len(r)
     percres   = 100*mn_r_by_user[user]/curr_cap_nodes
     nnodes    = mn_r_by_user[user]
     if user in mn_r_by_user_stdby:
         stdby_tot = mn_r_by_user_stdby[user]
         stdby_tot = f'({stdby_tot})'
-        print(f'   │ {user:<14}│ {count:<5}│ {nnodes:<4} {stdby_tot:<5}│ {perctot:<17.1f}│ {percres:<10.1f}│')
+        print(f'   │ {user:<14}│ {jcount:<5}│ {nnodes:<4} {stdby_tot:<5}│ {perctot:<17.1f}│ {percres:<10.1f}│')
     else:
-        print(f'   │ {user:<14}│ {count:<5}│ {nnodes:<10}│ {perctot:<17.1f}│ {percres:<10.1f}│')
+        print(f'   │ {user:<14}│ {jcount:<5}│ {nnodes:<10}│ {perctot:<17.1f}│ {percres:<10.1f}│')
 print(f'   └───────────────┴──────────────────┴──────────────────┴───────────┘\n')
 
 
