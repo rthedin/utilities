@@ -654,4 +654,251 @@ def readVTK_structuredPoints (vtkpath):
     return ds
 
 
+def compute_load_rose(turbs, nSectors=18):
+    
+    channel_pairs = [['TwrBsMxt_[kNm]', 'TwrBsMyt_[kNm]'],
+                     ['RootMxc1_[kNm]', 'RootMyc1_[kNm]'],
+                     ['LSSGagMya_[kNm]','LSSGagMza_[kNm]']]
+    channel_out   =  ['TwrBsMt_[kNm]', 'RootMc1_[kNm]', 'LSSGagMa_[kNm]']
+    
+    if nSectors%2 != 0:
+        print(f'WARNING: it is recommended an even number of sectors')
+        
+    # Create the sector bins
+    theta_bin = np.linspace(0,180, nSectors+1)
+
+    # Bin the loads for each pair
+    for p, curr_pair in enumerate(channel_pairs):
+        print(f'Processing pair {curr_pair[0]}, {curr_pair[1]}.')
+        
+        load_0deg = turbs[curr_pair[0]]
+        load_90deg = turbs[curr_pair[1]]
+        all_load = []
+        for i, theta in enumerate(theta_bin[:-1]):
+            curr_theta = (theta_bin[i] + theta_bin[i+1])/2
+            curr_load = load_0deg*cosd(curr_theta) + load_90deg*sind(curr_theta)
+            all_load.append(curr_load.expand_dims('theta').assign_coords({'theta': [curr_theta]}))
+                            
+        all_load = xr.concat(all_load, dim='theta').to_dataset(name=channel_out[p])
+        
+        turbs = xr.merge([turbs,all_load])
+    
+    return turbs
+
+
+
+def compute_del(ts, elapsed, lifetime, load2stress, slope, Sult, Sc=0.0, rainflow_bins=100, return_damage=False, goodman_correction=False):
+    """
+    Function from pCrunch.
+    
+    Computes damage equivalent load of input `ts`.
+
+    Parameters
+    ----------
+    ts : np.array
+        Time series to calculate DEL for.
+    elapsed : int | float
+        Elapsed time of the time series.
+    lifetime : int | float
+        Design lifetime of the component / material in years
+    load2stress : float (optional)
+        Linear scaling coefficient to convert an applied load to stress such that S = load2stress * L
+    slope : int | float
+        Slope of the fatigue curve.
+    Sult : float (optional)
+        Ultimate stress for use in Goodman equivalent stress calculation
+    Sc : float (optional)
+        Stress-axis intercept of log-log S-N Wohler curve. Taken as ultimate stress unless specified
+    rainflow_bins : int
+        Number of bins used in rainflow analysis.
+        Default: 100
+    return_damage: boolean
+        Whether to compute both DEL and damage
+        Default: False
+    goodman_correction: boolean
+        Whether to apply Goodman mean correction to loads and stress
+        Default: False
+
+    """
+    
+    import fatpack
+    
+    Scin = Sc if Sc > 0.0 else Sult
+
+    try:
+        F, Fmean = fatpack.find_rainflow_ranges(ts, return_means=True)
+        fatpack_rainflow_successful = 1
+    except:
+        print(f'Fatpack call for find_rainflow_ranges did not work. Setting F=Fmean=0')
+        fatpack_rainflow_successful = 0
+        F = Fmean = np.zeros(1)
+
+    if goodman_correction and np.abs(load2stress) > 0.0:
+        F = fatpack.find_goodman_equivalent_stress(F, Fmean, Sult/np.abs(load2stress))
+
+    Nrf, Frf = fatpack.find_range_count(F, rainflow_bins)
+    DELs = Frf ** slope * Nrf / elapsed
+    DEL = DELs.sum() ** (1.0 / slope)
+    # With fatpack do:
+    #curve = fatpack.LinearEnduranceCurve(1.)
+    #curve.m = slope
+    #curve.Nc = elapsed
+    #DEL = curve.find_miner_sum(np.c_[Frf, Nrf]) ** (1 / slope)
+
+    # Compute Palmgren/Miner damage using stress
+    if not return_damage:
+        return DEL
+    
+    D = np.nan # default return value
+    if return_damage and np.abs(load2stress) > 0.0:
+        try:
+            S, Mrf = fatpack.find_rainflow_ranges(ts*load2stress, return_means=True)
+        except:
+            S = Mrf = np.zeros(1)
+        if goodman_correction:
+            S = fatpack.find_goodman_equivalent_stress(S, Mrf, Sult)
+        Nrf, Srf = fatpack.find_range_count(S, rainflow_bins)
+        curve = fatpack.LinearEnduranceCurve(Scin)
+        curve.m = slope
+        curve.Nc = 1
+        D = curve.find_miner_sum(np.c_[Srf, Nrf])
+        if lifetime > 0.0:
+            D *= lifetime*365.0*24.0*60.0*60.0 / elapsed
+            
+    return DEL, D, fatpack_rainflow_successful
+
+
+
+
+
+
+def calcDEL_theta (ds, var):
+    
+    # Set constants
+    lifetime = 25        #  Design lifetime of the component / material in years
+    #load2stress = 1     #  Linear scaling coefficient to convert an applied load to stress such that S = load2stress * L
+    #slope = 10          #  Wohler exponent in the traditional SN-curve of S = A * N ^ -(1/m) (rthedin: 4 for tower, 10 for blades)
+    #Sult=6e8            #  Ultimate stress for use in Goodman equivalent stress calculation
+    Sc = 0               #  Stress-axis intercept of log-log S-N Wohler curve. Taken as ultimate stress unless specified
+    rainflow_bins = 100
+    
+    # rotorse.rs.strains.axial_root_sparU_load2stress,m**2,[ 0.  0.  -0.06122281 -0.02535384  0.04190673  0. ],Linear conversion factors between loads [Fx-z; Mx-z] and axial stress in the upper spar cap at blade root
+    # rotorse.rs.strains.axial_root_sparL_load2stress,m**2,[ 0.  0.  -0.06122281  0.02462415 -0.0423436   0. ],Linear conversion factors between loads [Fx-z; Mx-z] and axial stress in the lower spar cap at blade root
+    # drivese.lss_axial_load2stress,m**2,[1.0976203  0.         0.         0.         1.56430446 1.56430446],
+    # drivese.lss_shear_load2stress,m**2,[0.         1.77770979 1.77770979 0.78215223 0.         0.        ],
+    # towerse.member.axial_load2stress,m**2,"[[0.         0.         0.80912515 0.32621673 0.32621673 0.        ]
+    # towerse.member.shear_load2stress,m**2,"[[1.33022717 1.33022717 0.         0.         0.         0.16310837]
+    # From Garrett 2023-11-20 for the blade root: [[0.        , 0.        , 0.61747941, 0.49381254, 0.49381254,        0.        ]]
+    #
+    # These are the values we are interested in (JJ pointed out the positions in the array, except for the blade bending)
+    # blade bending 0.49381254  # from cylinder/blade axial
+    # lss bending   1.56430446  # from lss axial
+    # tower bending 0.32621673  # from tower axial
+    # tower torsion 0.16310837  # from tower shear
+
+    
+    # Ultimate stress values from https://github.com/IEAWindTask37/IEA-15-240-RWT/blob/master/WT_Ontology/IEA-15-240-RWT.yaml#L746
+    if var == 'RootMc1_[kNm]':  # blade root bending
+        slope = 10
+        Sult = 1047e6  # compression. Getting the lowest of compression/tension
+        load2stress = 0.49381254
+    elif var == 'TwrBsMt_[kNm]': # tower bending
+        slope = 4
+        Sult = 450e6
+        load2stress = 0.32621673
+    elif var == 'LSSGagMa_[kNm]': # lss bending 
+        slope = 4
+        Sult = 814e6
+        load2stress = 1.56430446
+    else:
+        raise ValueError('Variable not recognized')
+
+    # Initialize variable
+    full_del_withgoodman = np.zeros((len(ds.theta), len(ds.seed), len(ds.turbine), len(ds.wdir), len(ds.yawCase)))
+    full_del_woutgoodman = np.zeros((len(ds.theta), len(ds.seed), len(ds.turbine), len(ds.wdir), len(ds.yawCase)))
+    full_damage          = np.zeros((len(ds.theta), len(ds.seed), len(ds.turbine), len(ds.wdir), len(ds.yawCase)))
+    full_fatpack         = np.zeros((len(ds.theta), len(ds.seed), len(ds.turbine), len(ds.wdir), len(ds.yawCase)))
+
+    # Loop through everything and compute DEL
+    for i, theta in enumerate(ds.theta):
+        for j, seed in enumerate(ds.seed):
+            for k, turb in enumerate(ds.turbine):
+                #print(f'Processing theta {i+1}/{len(ds.theta)}, seed {j+1}/{len(ds.seed)}, turb {k+1}/{len(ds.turbine)}, all {len(ds.wdir)} wdir, all {len(ds.yawCase)} yawCases.    ', end='\r',flush=True)
+                for l, wdir in enumerate(ds.wdir):
+                    print(f'Processing theta {i+1}/{len(ds.theta)}, seed {j+1}/{len(ds.seed)}, turb {k+1}/{len(ds.turbine)}, wdir {l+1}/{len(ds.wdir)}, all {len(ds.yawCase)} yawCases.    ', end='\r', flush=True)
+                    for m, yaw in enumerate(ds.yawCase):
+                        ts = ds.sel(wdir=wdir, yawCase=yaw, seed=seed, turbine=turb, theta=theta).squeeze()[var]*1e3  # convert kNm to Nm
+                        elapsed = (ts.time[-1]-ts.time[0]).values
+                        
+                        DEL_withgoodman, damage, fatpack_rainflow_successful = compute_del(ts, elapsed, lifetime, load2stress, slope, Sult, Sc=Sc, rainflow_bins=rainflow_bins, return_damage=True, goodman_correction=True)
+                        DEL_woutgoodman                                      = compute_del(ts, elapsed, lifetime, load2stress, slope, Sult, Sc=Sc, rainflow_bins=rainflow_bins, return_damage=False, goodman_correction=False)
+                        
+                        full_del_withgoodman[i,j,k,l,m] = DEL_withgoodman
+                        full_del_woutgoodman[i,j,k,l,m] = DEL_woutgoodman
+                        full_damage[i,j,k,l,m] = damage
+                        full_fatpack[i,j,k,l,m] = fatpack_rainflow_successful
+                        
+
+    ds[f'DEL_withgoodman_[Nm]_{var}']       = (('theta', 'seed', 'turbine', 'wdir', 'yawCase'), full_del_withgoodman)
+    ds[f'DEL_woutgoodman_[Nm]_{var}']       = (('theta', 'seed', 'turbine', 'wdir', 'yawCase'), full_del_woutgoodman)
+    ds[f'damage_{var}']          = (('theta', 'seed', 'turbine', 'wdir', 'yawCase'), full_damage)
+    ds[f'fatpack_success_{var}'] = (('theta', 'seed', 'turbine', 'wdir', 'yawCase'), full_fatpack)
+    
+    return ds
+
+
+
+
+def calcDEL_nontheta (ds, var):
+    
+    # Set constants
+    lifetime = 25       #  Design lifetime of the component / material in years
+    #load2stress = 1     #  Linear scaling coefficient to convert an applied load to stress such that S = load2stress * L
+    #slope = 10          #  Wohler exponent in the traditional SN-curve of S = A * N ^ -(1/m) (rthedin: 4 for tower, 10 for blades)
+    #Sult=6e8           #  Ultimate stress for use in Goodman equivalent stress calculation
+    Sc =0               #  Stress-axis intercept of log-log S-N Wohler curve. Taken as ultimate stress unless specified
+    rainflow_bins = 100
+    
+    # Ultimate stress values from https://github.com/IEAWindTask37/IEA-15-240-RWT/blob/master/WT_Ontology/IEA-15-240-RWT.yaml#L746
+    if var =='RootMzc1_[kNm]':
+        raise NotImplementedError('Blade root torsional moment not implemented')
+    elif var == 'TwrBsMzt_[kNm]': # tower torsional 
+        slope = 4
+        Sult = 450e6
+        load2stress = 0.16310837
+    else:
+        raise ValueError('Variable not recognized')
+
+    # Initialize variable
+    full_del_withgoodman = np.zeros((len(ds.seed), len(ds.turbine), len(ds.wdir), len(ds.yawCase)))
+    full_del_woutgoodman = np.zeros((len(ds.seed), len(ds.turbine), len(ds.wdir), len(ds.yawCase)))
+    full_damage  = np.zeros((len(ds.seed), len(ds.turbine), len(ds.wdir), len(ds.yawCase)))
+    full_fatpack = np.zeros((len(ds.seed), len(ds.turbine), len(ds.wdir), len(ds.yawCase)))
+
+    # Loop through everything and compute DEL
+    for i, seed in enumerate(ds.seed):
+        for j, turb in enumerate(ds.turbine):
+            for k, wdir in enumerate(ds.wdir):
+                print(f'Processing seed {i+1}/{len(ds.seed)}, turb {j+1}/{len(ds.turbine)}, wdir {k+1}/{len(ds.wdir)}, all {len(ds.yawCase)} yawCases.    ', end='\r', flush=True)
+                for l, yaw in enumerate(ds.yawCase):
+                    ts = ds.sel(wdir=wdir, yawCase=yaw, seed=seed, turbine=turb).squeeze()[var]*1e3  # convert kNm to Nm
+                    elapsed = (ts.time[-1]-ts.time[0]).values
+                    
+                    DEL_withgoodman, damage, fatpack_rainflow_successful = compute_del(ts, elapsed, lifetime, load2stress, slope, Sult, Sc=Sc, rainflow_bins=rainflow_bins, return_damage=True, goodman_correction=True)
+                    DEL_woutgoodman                                      = compute_del(ts, elapsed, lifetime, load2stress, slope, Sult, Sc=Sc, rainflow_bins=rainflow_bins, return_damage=False, goodman_correction=False)
+
+                    full_del_withgoodman[i,j,k,l] = DEL_withgoodman
+                    full_del_woutgoodman[i,j,k,l] = DEL_woutgoodman
+                    full_damage[i,j,k,l] = damage
+                    full_fatpack[i,j,k,l] = fatpack_rainflow_successful
+                    
+
+    ds[f'DEL_withgoodman_[Nm]_{var}'] = (('seed', 'turbine', 'wdir', 'yawCase'), full_del_withgoodman)
+    ds[f'DEL_woutgoodman_[Nm]_{var}'] = (('seed', 'turbine', 'wdir', 'yawCase'), full_del_woutgoodman)
+    ds[f'damage_{var}']          = (('seed', 'turbine', 'wdir', 'yawCase'), full_damage)
+    ds[f'fatpack_success_{var}'] = (('seed', 'turbine', 'wdir', 'yawCase'), full_fatpack)
+    
+    return ds
+
+
 
