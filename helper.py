@@ -27,6 +27,12 @@ str_var_common = {
     "TKE"   : "TKE",
     "TI"    : "TI",
     "TI_TKE":"TI_TKE",
+    #
+    "TI_pavg"    : "TI_pavg",
+    "TI_hor"     : "TI_hor",
+    "TI_TKE_Umag": "TI_TKE_Umag",
+    "TI_TKE_Uhor": "TI_TKE_Uhor",
+    #
     "u*"    : "calculated_u*",
     "sigma_u_over_u*":"sigma_u_over_calc_u*",       # uu/u*
     "sigma_v_over_u*":"sigma_v_over_calc_u*",       # vv/u*
@@ -228,11 +234,16 @@ def calc_QOIs(df, code='sowfa'):
     df[str_var['u*']] = (df[str_var['uw']]**2 + df[str_var['vw']]**2)**0.25
     df[str_var['TKE']] = 0.5*(df[str_var['uu']] + df[str_var['vv']] + df[str_var['ww']])
     ang = np.arctan2(df[str_var['v']],df[str_var['u']])
-    df[str_var['TI']] = df[str_var['uu']]*np.cos(ang)**2 + 2*df[str_var['uv']]*np.sin(ang)*np.cos(ang) + df[str_var['vv']]*np.sin(ang)**2
-    df[str_var['TI']] = np.sqrt(df[str_var['TI']]) / df[str_var['wspd']]
 
-    # TI as typical equations, based on TKE (same as AMR-Wind's TI TKE)
-    df[str_var['TI_TKE']] = np.sqrt((df[str_var['uu']]+df[str_var['vv']]+df[str_var['ww']])/3.0)/np.sqrt(df[str_var['u']]**2 + df[str_var['v']]**2)
+    # TI based on the planar average quantities without vertical variances
+    df[str_var['TI_pavg']] = np.sqrt(  df[str_var['uu']]*np.cos(ang)**2 + 2*df[str_var['uv']]*np.sin(ang)*np.cos(ang) + df[str_var['vv']]*np.sin(ang)**2  )/df[str_var['wspd']]
+
+    # TI based on Uhorizontal
+    df[str_var['TI_hor']] = np.sqrt( df[str_var['uu']]**2 + df[str_var['vv']]**2 )/df[str_var['wspd']]
+
+    # TI as typical equations, based on TKE (same as AMR-Wind's TI TKE), using Umag and Uhorizontal to normalize
+    df[str_var['TI_TKE_Umag']] = np.sqrt( (df[str_var['uu']]+df[str_var['vv']]+df[str_var['ww']])/3.0)/np.sqrt(df[str_var['u']]**2 + df[str_var['v']]**2 + df[str_var['w']]**2)
+    df[str_var['TI_TKE_Uhor']] = np.sqrt((df[str_var['uu']]+df[str_var['vv']]+df[str_var['ww']])/3.0)/np.sqrt(df[str_var['u']]**2 + df[str_var['v']]**2)
 
 
     # Let's also compute the non-dimension variances
